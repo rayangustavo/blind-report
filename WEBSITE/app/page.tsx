@@ -79,10 +79,12 @@ export default function App() {
     disconnectWallet,
     registerNewsroom,
     rotateKey,
+    updatePolicy,
     exportBackup,
     importBackup,
     addJournalist,
     revokeJournalist,
+    renewJournalist,
     shareKeyring,
     renewSubmission,
     newReaderKey,
@@ -456,14 +458,18 @@ export default function App() {
           onReply={replyToReport}
           onRegisterNewsroom={registerNewsroom}
           onRotateKey={rotateKey}
+          onUpdatePolicy={updatePolicy}
           onExportBackup={exportBackup}
           onImportBackup={importBackup}
           onAddJournalist={addJournalist}
           onRevokeJournalist={revokeJournalist}
+          onRenewJournalist={renewJournalist}
           onShareKeyring={shareKeyring}
           onNewReaderKey={newReaderKey}
           onImportSharedKeyring={importSharedKeyring}
           onRenewSubmission={renewSubmission}
+          adminStep={state.adminStep}
+          editorialPolicy={state.editorialPolicy}
           busy={state.busy}
           onBack={() => navigate('home')}
         />
@@ -919,14 +925,18 @@ export function EditorialDesk({
   onReply,
   onRegisterNewsroom,
   onRotateKey,
+  onUpdatePolicy,
   onExportBackup,
   onImportBackup,
   onAddJournalist,
   onRevokeJournalist,
+  onRenewJournalist,
   onShareKeyring,
   onNewReaderKey,
   onImportSharedKeyring,
   onRenewSubmission,
+  adminStep,
+  editorialPolicy,
   busy,
   onBack,
 }: any) {
@@ -938,9 +948,15 @@ export function EditorialDesk({
   const [newJournalistLabel, setNewJournalistLabel] = useState('')
   const [newJournalistAddr, setNewJournalistAddr] = useState('')
   const [newJournalistReaderKey, setNewJournalistReaderKey] = useState('')
+  const [newJournalistDays, setNewJournalistDays] = useState(180)
   const [shareReaderKeyInput, setShareReaderKeyInput] = useState('')
   const [importKeyringBlobInput, setImportKeyringBlobInput] = useState('')
   const [registerLabel, setRegisterLabel] = useState('folha-investigativa')
+  const [policyCategories, setPolicyCategories] = useState(
+    editorialPolicy?.categories?.join(', ') ?? 'investigacao, corrupcao, direitos-humanos'
+  )
+  const [policyMaxBytes, setPolicyMaxBytes] = useState(editorialPolicy?.maxBytes ?? 250000)
+  const [policyAttachments, setPolicyAttachments] = useState(editorialPolicy?.attachments ?? true)
 
   const isOwner = role === 'admin'
   const isJournalist = role === 'journalist'
@@ -1295,10 +1311,28 @@ export function EditorialDesk({
                     <td className="font-mono text-xs text-emerald-400">{member.address}</td>
                     <td><Pill tone={member.active ? 'investigating' : 'archived'}>{member.active ? 'Active' : 'Revoked'}</Pill></td>
                     <td>
-                      {member.active && (
-                        <button className="text-xs text-rose-400 hover:underline" onClick={() => onRevokeJournalist(member.label)}>
-                          Revoke
-                        </button>
+                      {member.active ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="text-xs text-amber-400 hover:underline font-medium"
+                            disabled={busy}
+                            onClick={() => onRenewJournalist(member.label, 90)}
+                            title="Renew subname for 90 days on ENSv2 Sepolia"
+                          >
+                            Renew (+90d)
+                          </button>
+                          <span className="text-gray-600">·</span>
+                          <button
+                            className="text-xs text-rose-400 hover:underline"
+                            disabled={busy}
+                            onClick={() => onRevokeJournalist(member.label)}
+                            title="Revoke subname on ENSv2 Sepolia"
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">Revoked</span>
                       )}
                     </td>
                   </tr>
@@ -1322,10 +1356,19 @@ export function EditorialDesk({
                   <label>Reporter Reader Public Key (Base64Url)</label>
                   <input placeholder="Key provided by journalist..." value={newJournalistReaderKey} onChange={(e) => setNewJournalistReaderKey(e.target.value)} />
                 </div>
+                <div className="form-group">
+                  <label>Subname Validity (Days)</label>
+                  <input
+                    type="number"
+                    value={newJournalistDays}
+                    onChange={(e) => setNewJournalistDays(Number(e.target.value))}
+                    min={1}
+                  />
+                </div>
                 <button
                   className="primary-button small-button"
                   disabled={busy || !newJournalistLabel || !newJournalistAddr}
-                  onClick={() => onAddJournalist({ label: newJournalistLabel, address: newJournalistAddr, readerPublicKey: newJournalistReaderKey })}
+                  onClick={() => onAddJournalist({ label: newJournalistLabel, address: newJournalistAddr, readerPublicKey: newJournalistReaderKey, validForDays: newJournalistDays })}
                 >
                   Mint Subname on ENSv2
                 </button>
@@ -1419,6 +1462,52 @@ export function EditorialDesk({
               </div>
               <button className="outline-button small-button" disabled={busy} onClick={onRotateKey}>
                 <RefreshCw size={14} /> Rotate to Version {keyVersion + 1}
+              </button>
+            </div>
+
+            {/* EDITORIAL POLICY ON-CHAIN */}
+            <div className="mt-6 p-4 bg-[#0f1e1b] border border-[#233e36] rounded">
+              <h4 className="font-bold text-sm text-emerald-400 mb-2">ENSv2 Editorial Policy (On-Chain Text Record)</h4>
+              <p className="text-xs text-gray-400 mb-3">
+                Configure acceptable categories, maximum payload limit, and attachment permissions published on <code>blindreport.policy</code>.
+              </p>
+              <div className="form-group mb-3">
+                <label>Accepted Investigation Categories (Comma separated)</label>
+                <input
+                  value={policyCategories}
+                  onChange={(e) => setPolicyCategories(e.target.value)}
+                  placeholder="e.g. investigacao, corrupcao, direitos-humanos"
+                />
+              </div>
+              <div className="flex gap-4 items-center mb-3">
+                <div className="form-group flex-1">
+                  <label>Max Body Limit (Bytes)</label>
+                  <input
+                    type="number"
+                    value={policyMaxBytes}
+                    onChange={(e) => setPolicyMaxBytes(Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-group flex items-center gap-2 pt-5">
+                  <input
+                    type="checkbox"
+                    id="policyAttachments"
+                    checked={policyAttachments}
+                    onChange={(e) => setPolicyAttachments(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 bg-gray-900 border-gray-700"
+                  />
+                  <label htmlFor="policyAttachments" className="cursor-pointer text-xs">Allow Document Attachments</label>
+                </div>
+              </div>
+              <button
+                className="primary-button small-button"
+                disabled={busy || !policyCategories.trim()}
+                onClick={() => {
+                  const cats = policyCategories.split(',').map((c) => c.trim()).filter(Boolean)
+                  onUpdatePolicy({ categories: cats, maxBytes: policyMaxBytes, attachments: policyAttachments })
+                }}
+              >
+                Publish Policy to ENSv2 (Sepolia)
               </button>
             </div>
           </div>
@@ -1529,9 +1618,27 @@ export function EditorialDesk({
                 disabled={busy || !registerLabel}
                 onClick={() => onRegisterNewsroom({ label: registerLabel, categories: ['Corruption', 'Public policy', 'Human rights', 'Environment'], maxBytes: 200000, attachments: true })}
               >
-                Execute Sepolia Deployment (Commit & Reveal)
+                {busy ? 'Executing On-Chain Deployment...' : 'Execute Sepolia Deployment (Commit & Reveal)'}
               </button>
             </div>
+
+            {adminStep && (
+              <div className="max-w-md mt-6 p-4 bg-[#0a1815] border border-emerald-500/30 rounded">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <strong className="text-sm text-emerald-400">On-Chain ENSv2 Deployment Progress:</strong>
+                </div>
+                <div className="text-xs text-gray-300 font-mono">
+                  {adminStep.step === 'resolver' && '1/6 Deploying PermissionedResolver proxy via VerifiableFactory...'}
+                  {adminStep.step === 'commit' && '2/6 Submitting ENS commitment on ETHRegistrar (Commit-Reveal)...'}
+                  {adminStep.step === 'commit_wait' && `3/6 Awaiting Sepolia block maturation (~${adminStep.seconds ?? 60}s to prevent front-running)...`}
+                  {adminStep.step === 'register' && '4/6 Minting MockUSDC & Registering .eth name on Sepolia registrar...'}
+                  {adminStep.step === 'records' && '5/6 Publishing Libsodium Curve25519 public key and policy text records...'}
+                  {adminStep.step === 'registry' && '6/6 Deploying & authorizing SubRegistry for journalists...'}
+                  {adminStep.step === 'done' && '✔ Newsroom registration completed successfully!'}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

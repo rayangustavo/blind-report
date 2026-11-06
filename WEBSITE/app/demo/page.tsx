@@ -41,10 +41,12 @@ export default function DemoPage() {
     disconnectWallet,
     registerNewsroom,
     rotateKey,
+    updatePolicy,
     exportBackup,
     importBackup,
     addJournalist,
     revokeJournalist,
+    renewJournalist,
     shareKeyring,
     renewSubmission,
     newReaderKey,
@@ -283,14 +285,18 @@ export default function DemoPage() {
           onReply={replyToReport}
           onRegisterNewsroom={registerNewsroom}
           onRotateKey={rotateKey}
+          onUpdatePolicy={updatePolicy}
           onExportBackup={exportBackup}
           onImportBackup={importBackup}
           onAddJournalist={addJournalist}
           onRevokeJournalist={revokeJournalist}
+          onRenewJournalist={renewJournalist}
           onShareKeyring={shareKeyring}
           onNewReaderKey={newReaderKey}
           onImportSharedKeyring={importSharedKeyring}
           onRenewSubmission={renewSubmission}
+          adminStep={state.adminStep}
+          editorialPolicy={state.editorialPolicy}
           busy={state.busy}
           onBack={() => navigate('home')}
           isDemo={true}

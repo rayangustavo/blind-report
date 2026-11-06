@@ -29,8 +29,11 @@ import {
   verifyCommitment,
   type Keypair,
 } from '@blind-report/crypto'
+import type { AdminStep } from '@blind-report/ens-client'
+import type { Address } from 'viem'
 import { IDKit, proofOfHuman } from '@worldcoin/idkit-core'
 import { SEPOLIA_SPEC, createWallet, pickProvider, type Eip1193 } from './wallet'
+import { createOnChainNewsroomDeps } from './onchain-newsroom'
 
 export type ReportStatus = 'unread' | 'in_review' | 'investigating' | 'archived'
 
@@ -57,6 +60,7 @@ export type ReportItem = {
   rawEnvelope?: Uint8Array
   contentHash?: string
   mailboxPub?: Uint8Array
+  attachment?: { name: string; bytes?: Uint8Array; data?: Uint8Array; mimeType?: string }
 }
 
 export type WebsiteReceipt = {
@@ -145,6 +149,12 @@ export type WebsiteControllerState = {
   backupText?: string
   team: TeamMember[]
   expiring: ExpiringSubmission[]
+  adminStep?: AdminStep | null
+  editorialPolicy?: {
+    categories: string[]
+    maxBytes: number
+    attachments: boolean
+  }
 
   // Relayer & Infra
   relayerUrl: string
@@ -173,6 +183,7 @@ export type WebsiteDeps = {
     updatePolicy?(policy: any): Promise<void>
     addJournalist?(a: any): Promise<void>
     revokeJournalist?(label: string): Promise<any>
+    renewJournalist?(label: string, validForSeconds: number): Promise<void>
     exportBackup?(password: string): Promise<string>
     importBackup?(blob: string, password: string): Promise<void>
     shareKeyring?(readerPublicKey: Uint8Array): string
@@ -256,6 +267,12 @@ export function createWebsiteController(
       { key: '0xabc123...', title: 'Emergency contracts investigation', category: 'Corruption', blocksLeft: 4200, daysLeft: 7 },
       { key: '0xdef456...', title: 'Environmental license audit', category: 'Environment', blocksLeft: 8400, daysLeft: 14 },
     ],
+    adminStep: null,
+    editorialPolicy: {
+      categories: ['investigacao', 'corrupcao', 'direitos-humanos'],
+      maxBytes: 250000,
+      attachments: true,
+    },
 
     // Relayer
     relayerUrl: 'http://localhost:3001',
@@ -537,6 +554,21 @@ export function createWebsiteController(
           const role = isOwner ? 'admin' : isReporter ? 'journalist' : 'visitor'
           const journalistName = isReporter ? SHOWCASE_ACCOUNTS.reporterSubname : undefined
 
+          if (!deps.newsroomClient) {
+            try {
+              deps.newsroomClient = createOnChainNewsroomDeps(p, address as Address, {
+                onTxRecorded: (tx) => {
+                  controller.setLastTx(tx)
+                },
+                onProgress: (step) => {
+                  set({ adminStep: step })
+                },
+              })
+            } catch (bridgeErr) {
+              console.warn('Could not initialize on-chain bridge:', bridgeErr)
+            }
+          }
+
           set({
             walletAddress: address,
             role,
@@ -598,25 +630,34 @@ export function createWebsiteController(
     // -------------------------------------------------------------------------
     // FLUXOS DO OWNER (ADMINISTRADOR)
     // -------------------------------------------------------------------------
-    async registerNewsroom(a: { label: string; categories: string[]; maxBytes: number; attachments: boolean }) {
-      set({ busy: true, error: null, notice: null })
+    async registerNewsroom(a: { label: string; categories: string[]; maxBytes: number; attachments: boolean; durationSeconds?: number }) {
+      set({ busy: true, error: null, notice: null, adminStep: { step: 'resolver' } })
       try {
         if (deps.newsroomClient?.registerNewsroom) {
           await deps.newsroomClient.registerNewsroom(a)
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to register a newsroom on ENSv2.')
         }
+
         internalKeypair = newKeypair()
         localNewsroomKeys.clear()
         localNewsroomKeys.set(1, internalKeypair)
 
         set({
           busy: false,
+          adminStep: { step: 'done' },
           selectedNewsroom: `${a.label}.eth`,
           keysLoaded: true,
           keyVersion: 1,
+          editorialPolicy: {
+            categories: a.categories,
+            maxBytes: a.maxBytes,
+            attachments: a.attachments,
+          },
           notice: `Newsroom ${a.label}.eth registered successfully on ENSv2 (Sepolia)!`,
         })
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Failed to register newsroom on ENS.' })
+        set({ busy: false, adminStep: null, error: err?.message ?? 'Failed to register newsroom on ENS.' })
         throw err
       }
     },
@@ -627,7 +668,10 @@ export function createWebsiteController(
         let nextVer = state.keyVersion + 1
         if (deps.newsroomClient?.rotateKey) {
           nextVer = await deps.newsroomClient.rotateKey()
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to rotate newsroom key on ENSv2.')
         }
+
         internalKeypair = newKeypair()
         localNewsroomKeys.set(nextVer, internalKeypair)
 
@@ -639,6 +683,29 @@ export function createWebsiteController(
         return nextVer
       } catch (err: any) {
         set({ busy: false, error: err?.message ?? 'Failed to rotate newsroom key.' })
+        throw err
+      }
+    },
+
+    async updatePolicy(policy: { categories: string[]; maxBytes: number; attachments: boolean }) {
+      set({ busy: true, error: null })
+      try {
+        if (deps.newsroomClient?.updatePolicy) {
+          await deps.newsroomClient.updatePolicy({
+            ...policy,
+            epoch: 'monthly',
+          })
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to update policy on ENSv2.')
+        }
+
+        set({
+          busy: false,
+          editorialPolicy: policy,
+          notice: `Editorial policy updated successfully on ENSv2 for ${state.selectedNewsroom}!`,
+        })
+      } catch (err: any) {
+        set({ busy: false, error: err?.message ?? 'Failed to update newsroom policy on ENS.' })
         throw err
       }
     },
@@ -690,16 +757,21 @@ export function createWebsiteController(
       }
     },
 
-    async addJournalist(member: { label: string; address: string; readerPublicKey: string }) {
+    async addJournalist(member: { label: string; address: string; readerPublicKey: string; validForDays?: number }) {
       set({ busy: true, error: null })
       try {
         if (deps.newsroomClient?.addJournalist) {
+          const readerKeyBytes = fromBase64Url(member.readerPublicKey)
           await deps.newsroomClient.addJournalist({
             label: member.label,
             address: member.address as `0x${string}`,
-            readerPublicKey: fromBase64Url(member.readerPublicKey),
+            readerPublicKey: readerKeyBytes,
+            validForSeconds: (member.validForDays ?? 180) * 86400,
           })
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to delegate subname on ENSv2.')
         }
+
         const subname = `${member.label}.${state.selectedNewsroom}`
         const updatedTeam = [...state.team.filter((t) => t.label !== member.label), { label: member.label, address: member.address, subname, active: true }]
         set({
@@ -718,15 +790,36 @@ export function createWebsiteController(
       try {
         if (deps.newsroomClient?.revokeJournalist) {
           await deps.newsroomClient.revokeJournalist(label)
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to revoke journalist subname on ENSv2.')
         }
         const updatedTeam = state.team.map((t) => (t.label === label ? { ...t, active: false } : t))
         set({
           busy: false,
           team: updatedTeam,
-          notice: `Journalist ${label} revoked. Key rotation is recommended.`,
+          notice: `Journalist ${label} revoked on ENSv2. Key rotation is recommended.`,
         })
       } catch (err: any) {
         set({ busy: false, error: err?.message ?? 'Failed to revoke journalist.' })
+        throw err
+      }
+    },
+
+    async renewJournalist(label: string, validForDays: number = 90) {
+      set({ busy: true, error: null })
+      try {
+        const validForSeconds = validForDays * 86400
+        if (deps.newsroomClient?.renewJournalist) {
+          await deps.newsroomClient.renewJournalist(label, validForSeconds)
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to renew journalist subname on ENSv2.')
+        }
+        set({
+          busy: false,
+          notice: `Journalist ${label} renewed for +${validForDays} days on ENSv2 (Sepolia).`,
+        })
+      } catch (err: any) {
+        set({ busy: false, error: err?.message ?? 'Failed to renew journalist subname.' })
         throw err
       }
     },
