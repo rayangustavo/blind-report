@@ -388,12 +388,15 @@ export function createWebsiteController(
       })
     },
 
-    loadDemoScenario(scenario: 'procurement' | 'environmental' = 'procurement') {
+    loadDemoScenario(
+      scenario: 'procurement' | 'environmental' = 'procurement',
+      options?: { navigateToStep2?: boolean }
+    ) {
+      const shouldNavigate = options?.navigateToStep2 ?? true
       if (scenario === 'environmental') {
         const samplePdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x35])
         set({
-          view: 'report',
-          reportStep: 2,
+          ...(shouldNavigate ? { view: 'report', reportStep: 2 } : {}),
           selectedNewsroom: 'jornal-livre.eth',
           selectedCategory: 'Environment',
           message: 'Confidential Tip: Industrial wastewater discharges bypassing environmental treatment filters during night hours (01:00-04:00). High concentrations of heavy metals detected in regional river basin.',
@@ -403,14 +406,13 @@ export function createWebsiteController(
             mimeType: 'application/pdf',
           },
           zkpProofGenerated: true,
-          notice: 'Loaded Demo Scenario: "Illegal Chemical Dumping in River Basin"',
+          notice: 'Loaded sample data: "Illegal Chemical Dumping in River Basin"',
         })
       } else {
         const csvContent = 'ContractId,Recipient,AmountUSD,Date,Notes\nCT-2026-081,OmniLogistics LLC,14200000,2026-10-14,Emergency waiver granted without public tender\nCT-2026-094,PrimeGlobal Solutions,3800000,2026-10-22,Pre-signed before technical council review'
         const csvBytes = new TextEncoder().encode(csvContent)
         set({
-          view: 'report',
-          reportStep: 2,
+          ...(shouldNavigate ? { view: 'report', reportStep: 2 } : {}),
           selectedNewsroom: 'jornal-livre.eth',
           selectedCategory: 'Corruption',
           message: 'Confidential Leak: Emergency municipal contracts awarded without public bidding ($14.2M) to newly formed shell company with direct links to the procurement board. Attached forensic financial statement with bank transfer receipts.',
@@ -420,7 +422,7 @@ export function createWebsiteController(
             mimeType: 'text/csv',
           },
           zkpProofGenerated: true,
-          notice: 'Loaded Demo Scenario: "Procurement Corruption ($14.2M)"',
+          notice: 'Loaded sample data: "Procurement Corruption ($14.2M)"',
         })
       }
     },
