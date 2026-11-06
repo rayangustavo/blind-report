@@ -120,6 +120,64 @@ describe('WEBSITE - Contratos Estruturais da Página Principal (app/page.tsx)', 
     expect(submissionCall?.body).toContain('"envelope"')
   })
 
+  it('gera uma prova simulada compatível com o payload v4 do World ID', async () => {
+    const controller = createWebsiteController({
+      fetchFn: async (url) => {
+        if (String(url).includes('/submissions')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ key: '0xabc123', parts: 1 }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true }),
+        } as Response
+      },
+    })
+
+    controller.selectNewsroom('jornal-livre.eth')
+    controller.selectCategory('Corruption')
+    controller.setMessage('Mensagem válida para testar o payload v4 do mundo simulado.')
+
+    await controller.simulateWorldIdApproval()
+
+    expect(controller.state.worldIdProof).toMatchObject({
+      protocol_version: '4.0',
+      nonce: expect.any(String),
+      action: expect.stringContaining('submit:jornal-livre.eth:'),
+      environment: 'staging',
+      responses: [
+        expect.objectContaining({
+          identifier: 'proof_of_human',
+          issuer_schema_id: 1,
+          proof: expect.any(String),
+          nullifier: expect.any(String),
+          expires_at_min: expect.any(Number),
+        }),
+      ],
+    })
+  })
+
+  it('rejeita anexos acima do limite real de 200 KB antes de publicar', () => {
+    const controller = createWebsiteController({
+      fetchFn: async () => {
+        throw new Error('fetch should not be called for oversized attachments')
+      },
+    })
+
+    controller.setAttachment({
+      name: 'large-photo.jpg',
+      bytes: new Uint8Array(200001),
+      mimeType: 'image/jpeg',
+    })
+
+    expect(controller.state.attachment).toBeUndefined()
+    expect(controller.state.error).toContain('200000')
+  })
+
   it('nao quebra a UI quando o relayer falha com Failed to fetch', async () => {
     const controller = createWebsiteController({
       fetchFn: async () => {

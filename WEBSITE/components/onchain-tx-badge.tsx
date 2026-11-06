@@ -11,10 +11,10 @@ export function OnChainTxBadge({
   if (!tx) return null
 
   return (
-    <div className="onchain-tx-card" aria-label="Latest On-Chain Sepolia Transaction">
+    <div className="onchain-tx-card" aria-label="Latest Arkiv publication">
       <div className="onchain-tx-top">
         <span className="onchain-tx-pulse" />
-        <span className="onchain-tx-title">LIVE ON-CHAIN SEPOLIA TRANSACTION</span>
+        <span className="onchain-tx-title">LIVE ARKIV PUBLICATION</span>
         <span className="onchain-tx-time">{tx.timestamp}</span>
       </div>
       <div className="onchain-tx-label">{tx.label}</div>
@@ -27,9 +27,9 @@ export function OnChainTxBadge({
           target="_blank"
           rel="noreferrer"
           className="onchain-tx-link"
-          title="Verify transaction directly on Sepolia Etherscan"
+          title="Check this Arkiv publication on Rabdi explorer"
         >
-          View on Sepolia Etherscan <ExternalLink size={12} />
+          Check on Arkiv <ExternalLink size={12} />
         </a>
       </div>
     </div>

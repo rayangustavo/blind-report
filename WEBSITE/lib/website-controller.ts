@@ -14,6 +14,7 @@ import {
   decodePayload,
   encodePayload,
   fromBase64Url,
+  normalizeCategoryName,
   toBase64Url,
 } from '@blind-report/core'
 import {
@@ -200,10 +201,73 @@ export const SHOWCASE_ACCOUNTS = {
   reporterSubname: 'reporter.jornal-livre.eth',
 }
 
+export const MAX_ATTACHMENT_BYTES = 200000
+
 const normalizeNewsroom = (newsroom?: string | null): string => {
   const raw = newsroom?.trim() ?? ''
   if (!raw) return SHOWCASE_ACCOUNTS.newsroom
   return raw.includes('.eth') ? raw : SHOWCASE_ACCOUNTS.newsroom
+}
+
+const makeWorldIdV4Proof = (action: string, environment: 'staging' | 'production' = 'staging', nonce?: string) => {
+  const expiresAtMin = Math.floor(Date.now() / 1000) + 3600
+  const safeNonce = typeof nonce === 'string' && nonce.length > 0 ? nonce : `0x${'11'.repeat(32)}`
+
+  return {
+    protocol_version: '4.0',
+    nonce: safeNonce,
+    action,
+    environment,
+    responses: [{
+      identifier: 'proof_of_human',
+      issuer_schema_id: 1,
+      proof: `0x${'11'.repeat(160)}`,
+      nullifier: `0x${'ab'.repeat(32)}`,
+      expires_at_min: expiresAtMin,
+    }],
+  }
+}
+
+const normalizeWorldIdProof = (
+  proof: Record<string, any> | undefined,
+  fallbackAction: string,
+  fallbackEnvironment: 'staging' | 'production' = 'staging',
+  fallbackNonce?: string,
+): Record<string, any> => {
+  const action = typeof proof?.action === 'string' ? proof.action : fallbackAction
+  const environment = proof?.environment === 'production' || proof?.environment === 'staging'
+    ? proof.environment
+    : fallbackEnvironment
+  const nonce = typeof proof?.nonce === 'string' && proof.nonce.length > 0
+    ? proof.nonce
+    : (typeof fallbackNonce === 'string' && fallbackNonce.length > 0 ? fallbackNonce : `0x${'11'.repeat(32)}`)
+
+  const responses = Array.isArray(proof?.responses) && proof.responses.length > 0
+    ? proof.responses.map((response: any) => ({
+        identifier: response?.identifier ?? 'proof_of_human',
+        issuer_schema_id: Number(response?.issuer_schema_id ?? 1),
+        proof: typeof response?.proof === 'string' && /^0x[0-9a-fA-F]{320}$/.test(response.proof)
+          ? response.proof
+          : `0x${'11'.repeat(160)}`,
+        nullifier: typeof response?.nullifier === 'string' ? response.nullifier : `0x${'ab'.repeat(32)}`,
+        expires_at_min: Number(response?.expires_at_min ?? Math.floor(Date.now() / 1000) + 3600),
+        ...response,
+      }))
+    : [{
+        identifier: 'proof_of_human',
+        issuer_schema_id: 1,
+        proof: `0x${'11'.repeat(160)}`,
+        nullifier: `0x${'ab'.repeat(32)}`,
+        expires_at_min: Math.floor(Date.now() / 1000) + 3600,
+      }]
+
+  return {
+    protocol_version: '4.0',
+    nonce,
+    action,
+    environment,
+    responses,
+  }
 }
 
 export function createWebsiteController(
@@ -362,6 +426,13 @@ export function createWebsiteController(
     },
 
     setAttachment(attachment?: { name: string; bytes?: Uint8Array; mimeType?: string }) {
+      if (attachment?.bytes && attachment.bytes.length > MAX_ATTACHMENT_BYTES) {
+        set({
+          attachment: undefined,
+          error: `O anexo excede o limite de ${MAX_ATTACHMENT_BYTES} bytes. Reduza a imagem antes de enviar a denúncia.`,
+        })
+        return
+      }
       set({ attachment, error: null })
     },
 
@@ -391,9 +462,11 @@ export function createWebsiteController(
 
     setLastTx(tx: { hash: string; label: string; chainId?: string; url?: string }) {
       const chainId = tx.chainId ?? SEPOLIA_SPEC.chainId
-      const explorer = SEPOLIA_SPEC.blockExplorerUrls[0] ?? 'https://sepolia.etherscan.io'
       const cleanHash = tx.hash.replace(/^(0x)+/, '0x')
-      const url = tx.url ?? `${explorer.replace(/\/+$/, '')}/tx/${cleanHash}`
+      const explorer = tx.chainId === 'rabdi'
+        ? 'https://rabdi.explorer.arkiv.network'
+        : (SEPOLIA_SPEC.blockExplorerUrls[0] ?? 'https://sepolia.etherscan.io')
+      const url = tx.url ?? `${explorer.replace(/\/+$/, '')}/?search=${encodeURIComponent(cleanHash)}`
       const record: OnChainTxRecord = {
         hash: cleanHash,
         label: tx.label,
@@ -462,7 +535,13 @@ export function createWebsiteController(
         const done = await req.pollUntilCompletion({ timeout: 600000 })
 
         if (done.success) {
-          const proof = (done.result ?? done) as Record<string, any>
+          const rpNonce = typeof (ctx as any)?.rp_context?.nonce === 'string' ? (ctx as any).rp_context.nonce : undefined
+          const proof = normalizeWorldIdProof(
+            (done.result ?? done) as Record<string, any>,
+            ctx.action,
+            (ctx.environment ?? 'staging') as 'staging' | 'production',
+            rpNonce,
+          )
           set({ worldIdStatus: 'verified', zkpProofGenerated: true, worldIdProof: proof })
           return await controller.finalizeWorldIdApproval()
         }
@@ -492,12 +571,8 @@ export function createWebsiteController(
     },
 
     async simulateWorldIdApproval() {
-      const proof = {
-        protocol_version: '4.0',
-        action: `submit:${normalizeNewsroom(state.selectedNewsroom)}:${new Date().getUTCFullYear()}${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`,
-        environment: 'staging',
-        responses: [{ nullifier: '0x' + 'ab'.repeat(30), proof: ['0x1', '0x2', '0x3', '0x4', '0x5'] }],
-      }
+      const action = `submit:${normalizeNewsroom(state.selectedNewsroom)}:${new Date().getUTCFullYear()}${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`
+      const proof = makeWorldIdV4Proof(action, 'staging', `0x${'22'.repeat(32)}`)
       set({ worldIdStatus: 'verified', zkpProofGenerated: true, worldIdProof: proof })
       await new Promise((resolve) => setTimeout(resolve, 600))
       return await controller.finalizeWorldIdApproval()
@@ -1003,10 +1078,16 @@ export function createWebsiteController(
         set({ error: 'The tip must contain at least 10 characters.' })
         throw new Error('Mensagem curta demais')
       }
+      if (state.attachment?.bytes && state.attachment.bytes.length > MAX_ATTACHMENT_BYTES) {
+        const message = `A denúncia excede o tamanho máximo de ${MAX_ATTACHMENT_BYTES} bytes. Reduza a imagem ou remova o anexo.`
+        set({ busy: false, error: message })
+        throw new Error(message)
+      }
 
       set({ busy: true, error: null, notice: null })
 
       try {
+        const categoryKey = normalizeCategoryName(state.selectedCategory)
         const payloadBytes = encodePayload({
           text: state.message,
           attachment: state.attachment ? { name: state.attachment.name, data: state.attachment.bytes ?? new Uint8Array() } : undefined,
@@ -1016,7 +1097,7 @@ export function createWebsiteController(
           {
             newsroom: state.selectedNewsroom,
             pubkeyVersion: state.keyVersion,
-            category: state.selectedCategory,
+            category: categoryKey,
             recipients: [{ id: 'redacao', publicKey: internalKeypair.publicKey }],
             plaintext: payloadBytes,
           },
@@ -1030,7 +1111,7 @@ export function createWebsiteController(
         if (deps.sourceClient?.submit) {
           const res = await deps.sourceClient.submit({
             newsroom: state.selectedNewsroom,
-            category: state.selectedCategory,
+            category: categoryKey,
             text: state.message,
             attachment: state.attachment,
           })
@@ -1039,12 +1120,12 @@ export function createWebsiteController(
           }
         } else {
           const relayerBase = (state.relayerUrl ?? 'http://127.0.0.1:8787').replace(/\/+$/, '')
-          const proof = state.worldIdProof ?? {
-            protocol_version: '4.0',
-            action: state.worldIdAction ?? `submit:${state.selectedNewsroom}:${new Date().getUTCFullYear()}${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`,
-            environment: 'staging',
-            responses: [{ nullifier: '0x' + 'aa'.repeat(30), proof: ['0x1', '0x2', '0x3', '0x4', '0x5'] }],
-          }
+          const proof = normalizeWorldIdProof(
+            state.worldIdProof,
+            state.worldIdAction ?? `submit:${state.selectedNewsroom}:${new Date().getUTCFullYear()}${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`,
+            'staging',
+            typeof (state.worldIdProof as any)?.nonce === 'string' ? (state.worldIdProof as any).nonce : undefined,
+          )
 
           const res = await (deps.fetchFn ?? fetch)(`${relayerBase}/submissions`, {
             method: 'POST',
@@ -1052,7 +1133,7 @@ export function createWebsiteController(
             body: JSON.stringify({
               newsroom: state.selectedNewsroom,
               epoch: new Date().getUTCFullYear() * 100 + (new Date().getUTCMonth() + 1),
-              category: state.selectedCategory,
+              category: categoryKey,
               hasAttachment: Boolean(state.attachment),
               proof,
               envelope: toBase64Url(rawEnv),
@@ -1115,6 +1196,8 @@ export function createWebsiteController(
           : ('0x' + cleanReceiptKey.replace(/^0x/, '').padEnd(64, '0').slice(0, 64))
         controller.setLastTx({
           hash: onchainHash,
+          chainId: 'rabdi',
+          url: `https://rabdi.explorer.arkiv.network/?search=${encodeURIComponent(onchainHash)}`,
           label: `Tip Encrypted & Gas-Sponsored on Arkiv via Relayer (${SHOWCASE_ACCOUNTS.relayer.slice(0, 6)}...${SHOWCASE_ACCOUNTS.relayer.slice(-4)})`,
         })
 

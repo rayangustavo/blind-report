@@ -8,6 +8,10 @@ describe("RF-21 validar envio contra a política", () => {
     expect(validateSubmission(policy, { category: "corrupcao", sizeBytes: 500, hasAttachment: false })).toEqual({ ok: true });
   });
 
+  it("aceita_categoria_com_case_variado_igual_ao_que_a_ui_exibe", () => {
+    expect(validateSubmission(policy, { category: "Corrupcao", sizeBytes: 500, hasAttachment: false })).toEqual({ ok: true });
+  });
+
   it("recusa_categoria_fora_da_politica", () => {
     expect(validateSubmission(policy, { category: "outra", sizeBytes: 10, hasAttachment: false })).toMatchObject({ ok: false, code: "category_not_allowed" });
   });

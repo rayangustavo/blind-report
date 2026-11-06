@@ -1,4 +1,4 @@
-import { ARKIV_PRACTICAL_ENTITY_BYTES, PART_PAYLOAD_BYTES, isEpoch, isNewsroomName, joinParts, splitIntoParts, type Part } from "@blind-report/core";
+import { ARKIV_PRACTICAL_ENTITY_BYTES, PART_PAYLOAD_BYTES, isEpoch, isNewsroomName, joinParts, normalizeCategoryName, splitIntoParts, type Part } from "@blind-report/core";
 import { isAddress, type Address, type Hex } from "viem";
 import type { Backend, EntityRow } from "./backend.ts";
 import { DEFAULT_ANNOTATION_RETENTION_SECONDS, STATUSES, STORE_MAX_RETENTION_SECONDS, type EntityKind, type Status } from "./constants.ts";
@@ -142,7 +142,8 @@ export function createStore(backend: Backend) {
     /** O relayer publica a denúncia (dividida em partes se for grande) e entrega a custódia à redação. */
     async publishSubmission(input: PublishInput): Promise<{ key: Hex; keys: Hex[] }> {
       if (!isNewsroomName(input.newsroom)) throw bad("Nome de redação inválido.");
-      if (!CATEGORY_RE.test(input.category)) throw bad("Categoria inválida.");
+      const category = normalizeCategoryName(input.category);
+      if (!CATEGORY_RE.test(category)) throw bad("Categoria inválida.");
       asHash("contentHash", input.contentHash);
       if (!isEpoch(input.epoch)) throw bad("Época inválida.");
       if (!Number.isInteger(input.pubkeyVersion) || input.pubkeyVersion < 1) throw bad("Versão da chave inválida.");
@@ -155,7 +156,7 @@ export function createStore(backend: Backend) {
       for (const p of parts) {
         const { key } = await backend.create(
           "denuncia",
-          { newsroom: input.newsroom, category: input.category, status: "new", epoch: BigInt(input.epoch), contentHash: input.contentHash, pubkeyVersion: BigInt(input.pubkeyVersion), part: BigInt(p.index), parts: BigInt(p.total) },
+          { newsroom: input.newsroom, category, status: "new", epoch: BigInt(input.epoch), contentHash: input.contentHash, pubkeyVersion: BigInt(input.pubkeyVersion), part: BigInt(p.index), parts: BigInt(p.total) },
           p.data,
           { expirationSeconds: input.retentionSeconds, readonly: true, permissionlessExtension: true },
         );
@@ -172,8 +173,9 @@ export function createStore(backend: Backend) {
       const offset = q.offset ?? 0;
       if (!Number.isInteger(limit) || limit < 1 || limit > PAGE) throw bad(`O limite deve estar entre 1 e ${PAGE}.`);
       if (!Number.isInteger(offset) || offset < 0) throw bad("O deslocamento deve ser inteiro e não negativo.");
-      if (q.category !== undefined && !CATEGORY_RE.test(q.category)) throw bad("Categoria inválida.");
-      const { items, skippedIncomplete, ignoredAnnotations } = await allSubmissions(q.newsroom, q.category, q.authorize);
+      const category = q.category !== undefined ? normalizeCategoryName(q.category) : undefined;
+      if (category !== undefined && !CATEGORY_RE.test(category)) throw bad("Categoria inválida.");
+      const { items, skippedIncomplete, ignoredAnnotations } = await allSubmissions(q.newsroom, category, q.authorize);
       const filtered = q.status ? items.filter((i) => i.status === q.status) : items;
       return { items: filtered.slice(offset, offset + limit), hasMore: filtered.length > offset + limit, skippedIncomplete, ignoredAnnotations };
     },

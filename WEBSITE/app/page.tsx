@@ -517,22 +517,72 @@ export function ReportFlow({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [attachedName, setAttachedName] = useState<string | null>(null)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const MAX_ATTACHMENT_BYTES = 200000
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      setAttachedName(file.name)
-      const reader = new FileReader()
-      reader.onload = () => {
-        if (reader.result instanceof ArrayBuffer) {
-          setAttachment({
-            name: file.name,
-            bytes: new Uint8Array(reader.result),
-            mimeType: file.type,
-          })
-        }
+    if (!file) return
+
+    const normalizeAttachment = async (candidate: File) => {
+      const inputBytes = new Uint8Array(await candidate.arrayBuffer())
+      if (inputBytes.length <= MAX_ATTACHMENT_BYTES) {
+        setAttachment({
+          name: candidate.name,
+          bytes: inputBytes,
+          mimeType: candidate.type,
+        })
+        setAttachedName(candidate.name)
+        return
       }
-      reader.readAsArrayBuffer(file)
+
+      if (!candidate.type.startsWith('image/')) {
+        window.alert(`O anexo excede o limite de ${MAX_ATTACHMENT_BYTES} bytes. Escolha uma imagem menor ou remova o arquivo.`)
+        setAttachedName(null)
+        return
+      }
+
+      const source = URL.createObjectURL(candidate)
+      const image = new Image()
+      image.decoding = 'async'
+      image.src = source
+      await image.decode().catch(() => undefined)
+
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        window.alert(`O anexo excede o limite de ${MAX_ATTACHMENT_BYTES} bytes. Reduza a imagem antes de enviar.`)
+        setAttachedName(null)
+        URL.revokeObjectURL(source)
+        return
+      }
+
+      const scale = Math.min(1, Math.sqrt(MAX_ATTACHMENT_BYTES / inputBytes.length))
+      canvas.width = Math.max(1, Math.round(image.width * scale))
+      canvas.height = Math.max(1, Math.round(image.height * scale))
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, candidate.type.startsWith('image/png') ? 'image/png' : 'image/jpeg', 0.7)
+      })
+
+      URL.revokeObjectURL(source)
+
+      if (!blob || blob.size > MAX_ATTACHMENT_BYTES) {
+        window.alert(`O anexo excede o limite de ${MAX_ATTACHMENT_BYTES} bytes. Reduza a imagem antes de enviar.`)
+        setAttachedName(null)
+        return
+      }
+
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      setAttachment({
+        name: candidate.name,
+        bytes,
+        mimeType: blob.type || candidate.type,
+      })
+      setAttachedName(candidate.name)
     }
+
+    await normalizeAttachment(file)
   }
 
   return (
@@ -655,7 +705,7 @@ export function ReportFlow({
               >
                 <Paperclip size={16} /> {attachedName ? `Attached: ${attachedName}` : 'Attach file'}
               </button>
-              <span>PDF, JPG, PNG or CSV · up to 10 MB</span>
+              <span>PDF, JPG, PNG or CSV · up to 200 KB</span>
             </div>
 
             <div className="flow-actions">

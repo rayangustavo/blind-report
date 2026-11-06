@@ -1,4 +1,4 @@
-import { currentEpoch, fromBase64Url, isEpoch, isNewsroomName, validateSubmission } from "@blind-report/core";
+import { currentEpoch, fromBase64Url, isEpoch, isNewsroomName, normalizeCategoryName, validateSubmission } from "@blind-report/core";
 import { CryptoError, decodeEnvelope, verifyContentHash } from "@blind-report/crypto";
 import { NewsroomNotFoundError, RecordsError } from "@blind-report/ens-client";
 import type { IdKitPayload, RefusalCode } from "@blind-report/worldid-gate";
@@ -34,7 +34,7 @@ export function createRelayerApp(deps: RelayerDeps) {
           name,
           publicKey: new Uint8Array(32).fill(7),
           pubkeyVersion: 1,
-          policy: { categories: ["Corruption", "Public policy", "Human rights", "Environment"], maxBytes: 200000, attachments: true, epoch: "monthly" },
+          policy: { categories: ["corruption", "public_policy", "human_rights", "environment"], maxBytes: 200000, attachments: true, epoch: "monthly" },
           relayers: [],
           custodian: "0x000000000000000000000000000000000000dEaD",
         };
@@ -73,6 +73,7 @@ export function createRelayerApp(deps: RelayerDeps) {
     if (typeof b.envelope !== "string") throw fail(400, "invalid_request", "Campo envelope ausente.");
     const hasAttachment = b.hasAttachment === true;
     const { newsroom, epoch, category } = b as { newsroom: string; epoch: number; category: string };
+    const normalizedCategory = normalizeCategoryName(category);
 
     let envelopeBytes: Uint8Array;
     try {
@@ -93,12 +94,12 @@ export function createRelayerApp(deps: RelayerDeps) {
       throw e;
     }
     if (!verifyContentHash(envelope)) throw fail(422, "invalid_envelope", "O hash do conteúdo não confere.");
-    if (envelope.newsroom !== newsroom || envelope.category !== category) throw fail(422, "envelope_mismatch", "O envelope não corresponde à redação ou à categoria informadas.");
+    if (envelope.newsroom !== newsroom || normalizeCategoryName(envelope.category) !== normalizedCategory) throw fail(422, "envelope_mismatch", "O envelope não corresponde à redação ou à categoria informadas.");
     if (envelope.pubkeyVersion !== info.pubkeyVersion) {
       throw fail(409, "stale_key_version", "A chave da redação mudou; cifre novamente com a chave atual.", { currentVersion: info.pubkeyVersion });
     }
 
-    const check = validateSubmission(info.policy, { category, sizeBytes: Math.max(1, envelope.ciphertext.length - 16), hasAttachment });
+    const check = validateSubmission(info.policy, { category: normalizedCategory, sizeBytes: Math.max(1, envelope.ciphertext.length - 16), hasAttachment });
     if (!check.ok) throw fail(422, check.code, check.message);
 
     const admitted = await deps.gate.admit({ newsroom, epoch, payload: b.proof as IdKitPayload });
@@ -106,7 +107,7 @@ export function createRelayerApp(deps: RelayerDeps) {
 
     try {
       const { key, keys } = await deps.store.publishSubmission({
-        newsroom, category, epoch, contentHash: envelope.contentHash, pubkeyVersion: info.pubkeyVersion,
+        newsroom, category: normalizedCategory, epoch, contentHash: envelope.contentHash, pubkeyVersion: info.pubkeyVersion,
         envelope: envelopeBytes, custodian: info.custodian, retentionSeconds: deps.retentionSeconds,
       });
       return respond(201, { key, parts: keys.length });
