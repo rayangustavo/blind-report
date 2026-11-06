@@ -117,8 +117,7 @@ Inicie o ambiente local:
 ```bash
 npm run dev:all
 ```
-- Acesse `http://localhost:5173` para o portal da fonte anônima (com ribbon e cards de ENS, World ID e Arkiv).
-- Acesse `http://localhost:5174` para o painel editorial dos jornalistas (com gerenciamento de custódia Arkiv e subnomes ENS).
+- Acesse `http://localhost:3000` para o portal web unificado (Next.js 16 + React 19), integrando o envio da fonte com Prova ZKP World ID e o painel editorial com custódia Arkiv e subnomes ENS.
 
 ---
 

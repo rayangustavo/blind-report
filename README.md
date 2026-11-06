@@ -41,10 +41,8 @@ blind-report/
 │   ├── source-client/   # SDK da fonte (headless)
 │   └── newsroom-client/ # SDK da redação (headless)
 ├── apps/
-│   ├── relayer/         # Serviço HTTP de ingestão sem logs de IP
-│   ├── web-source/      # Interface web da fonte (estática)
-│   └── web-newsroom/    # Painel editorial da redação
-├── WEBSITE/             # Novo portal unificado Next.js 16 (Landing + Denúncia + Redação)
+│   └── relayer/         # Serviço HTTP de ingestão sem logs de IP
+├── WEBSITE/             # Portal web unificado Next.js 16 + React 19 (Landing + Denúncia + Redação)
 └── tests/
     ├── contract/        # Testes de limites e regras arquiteturais
     └── e2e/             # Testes de ponta a ponta sem navegador
@@ -59,7 +57,7 @@ npm install
 # Executar guardrails de segurança
 npm run guardrails
 
-# Executar testes unitários
+# Executar testes unitários e de integração
 npm test
 
 # Executar verificação de tipos
@@ -69,18 +67,20 @@ npm run typecheck
 npm run ci
 ```
 
-### 🖥️ Novo Portal Web Unificado (Next.js 16 + Tailwind CSS)
+### 🖥️ Portal Web Unificado (Next.js 16 + React 19 + Tailwind CSS)
 
 ```bash
 # Instalar dependências do website
 npm run website:install
 
-# Rodar o website em modo desenvolvimento (porta 3000)
-npm run website:dev
+# Rodar o portal web em modo desenvolvimento (porta 3000)
+npm run dev           # ou: npm run web
 
-# Compilar para produção
-npm run website:build
-```
+# Compilar para produção (Next.js estático com Turbopack)
+npm run web:build
+
+# Executar suíte de testes do frontend
+npm run test:website
 
 ## Licença
 
