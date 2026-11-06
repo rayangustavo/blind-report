@@ -186,10 +186,6 @@ export default function App() {
           <button onClick={clearAlerts}><X size={15} /></button>
         </div>
       )}
-          <span>{state.error}</span>
-          <button onClick={clearAlerts}><X size={15} /></button>
-        </div>
-      )}
 
       {/* VIEW: HOME (LANDING PAGE) */}
       {state.view === 'home' && (
