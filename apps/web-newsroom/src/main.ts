@@ -149,6 +149,10 @@ async function start() {
     const busy = s.status === "connecting" || s.status === "signing";
     const msg = walletError ?? s.error?.message;
     return h("section", {},
+      h("div", { className: "judging-preset-bar" },
+        h("span", { className: "judging-badge" }, "⚡ ETHGlobal Mumbai Demo"),
+        h("span", { className: "muted" }, "Sepolia Testnet · Arkiv Rabdi · ENSv2 PKI")
+      ),
       h("h2", {}, "Entrar com a carteira"),
       h("p", {}, "Sua carteira prova quem você é. Nenhuma chave privada é digitada aqui. Você escolhe ou cria a redação no próximo passo."),
       msg ? h("p", { className: "error", role: "alert" }, msg) : null,
@@ -183,6 +187,10 @@ async function start() {
     const fresh = input("nw", { placeholder: "minharedacao.eth" });
     const open = (newsroom: string, journalist?: string) => { form = { ...form, newsroom, journalist: journalist ?? "" }; void activeSession.choose({ newsroom, journalist }); };
     return h("section", {},
+      h("div", { className: "judging-preset-bar" },
+        h("span", { className: "judging-badge" }, "⚡ 1-Click Demo Shortcut"),
+        h("button", { className: "btn-preset", onclick: () => open("jornal-livre.eth", "reporter") }, "⚡ Open Demo: reporter.jornal-livre.eth")
+      ),
       h("h2", {}, "Qual redação?"),
       h("p", { className: "muted" }, "Carteira conectada: ", linkAddr(SEPOLIA_SPEC, address)),
       s.error ? h("p", { className: "error", role: "alert" }, s.error.message) : null,
