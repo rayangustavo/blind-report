@@ -39,7 +39,7 @@ import { ProductionEvaluatorCallout } from '../components/production-evaluator-c
 import { MetaMaskModal } from '../components/metamask-modal'
 import { OnChainTxBadge } from '../components/onchain-tx-badge'
 
-function Logo() {
+export function Logo() {
   return (
     <div className="brand">
       <span className="brand-mark">
@@ -52,7 +52,7 @@ function Logo() {
   )
 }
 
-function Pill({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: string }) {
+export function Pill({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: string }) {
   return <span className={`pill pill-${tone}`}>{children}</span>
 }
 
@@ -483,7 +483,7 @@ export default function App() {
 // -----------------------------------------------------------------------------
 // COMPONENT: REPORT FLOW (WHISTLEBLOWER)
 // -----------------------------------------------------------------------------
-function ReportFlow({
+export function ReportFlow({
   step,
   setStep,
   category,
@@ -498,6 +498,10 @@ function ReportFlow({
   busy,
   onBack,
   onCheckReplies,
+  isDemo,
+  onLoadScenario,
+  onFastTrackZkp,
+  zkpProofGenerated,
 }: any) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [attachedName, setAttachedName] = useState<string | null>(null)
@@ -578,6 +582,43 @@ function ReportFlow({
             <p className="flow-intro">
               The more context you share, the better the newsroom can evaluate. Avoid including details that might identify you.
             </p>
+
+            {isDemo && (
+              <div className="p-3 bg-amber-950/40 border border-amber-600/50 rounded mb-4 text-left">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                    <Zap size={14} /> Evaluator Fast-Track Controls
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="demo-load-btn text-xs py-1 px-2"
+                      onClick={() => onLoadScenario?.('procurement')}
+                    >
+                      ⚡ Load "$14.2M Procurement"
+                    </button>
+                    <button
+                      type="button"
+                      className="demo-load-btn text-xs py-1 px-2"
+                      onClick={() => onLoadScenario?.('environmental')}
+                    >
+                      ⚡ Load "Chemical Dumping"
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-300">
+                  <span>World ID Action: <code>submit:{newsroom}:202611</code></span>
+                  <button
+                    type="button"
+                    className={`outline-button small-button text-xs py-1 ${zkpProofGenerated ? 'text-emerald-400 border-emerald-500' : ''}`}
+                    onClick={() => onFastTrackZkp?.()}
+                  >
+                    {zkpProofGenerated ? '✔ ZKP Ready' : '⚡ 1-Click ZKP (Bypass Orb)'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <label>Tip category</label>
             <div className="category-grid">
               {['Corruption', 'Public policy', 'Human rights', 'Environment'].map((item) => (
@@ -679,7 +720,7 @@ function ReportFlow({
 // -----------------------------------------------------------------------------
 // COMPONENT: REPLIES FLOW (WHISTLEBLOWER RETURN CHANNEL)
 // -----------------------------------------------------------------------------
-function RepliesFlow({
+export function RepliesFlow({
   receiptInput,
   setReceiptInput,
   latestReceipt,
@@ -757,7 +798,7 @@ function RepliesFlow({
 // -----------------------------------------------------------------------------
 // COMPONENT: VERIFY AUTHORSHIP (COMMITMENT REVELATION)
 // -----------------------------------------------------------------------------
-function VerifyFlow({
+export function VerifyFlow({
   verifyText,
   setVerifyText,
   verifySaltHex,
@@ -767,6 +808,7 @@ function VerifyFlow({
   onVerify,
   busy,
   onBack,
+  isDemo,
 }: any) {
   return (
     <section className="flow-page">
@@ -794,7 +836,7 @@ function VerifyFlow({
               }
             }}
           >
-            ⚡ Pre-fill with latest submission data
+            {isDemo ? '⚡ Pre-fill with latest submission data' : 'Pre-fill with latest submission data'}
           </button>
         )}
 
@@ -843,7 +885,7 @@ function VerifyFlow({
 // -----------------------------------------------------------------------------
 // COMPONENT: EDITORIAL DESK (OWNER & JOURNALIST DASHBOARD)
 // -----------------------------------------------------------------------------
-function EditorialDesk({
+export function EditorialDesk({
   filter,
   setFilter,
   searchQuery,
