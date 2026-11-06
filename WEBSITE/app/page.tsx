@@ -570,10 +570,11 @@ export function ReportFlow({
             <label>Which newsroom do you want to submit to?</label>
             <div className="select-shell">
               <select value={newsroom} onChange={(e) => setNewsroom(e.target.value)}>
+                <option value="br53fd4i.eth">br53fd4i.eth (ENSv2 Sepolia Registered)</option>
+                <option value="jornal-livre.eth">jornal-livre.eth (ENSv2 Official Sepolia)</option>
                 <option value="Public Ledger">Public Ledger</option>
                 <option value="City Journal">City Journal</option>
                 <option value="Horizon Wire">Horizon Wire</option>
-                <option value="jornal-livre.eth">jornal-livre.eth (ENSv2 Official Sepolia)</option>
               </select>
               <ChevronDown size={16} />
             </div>
@@ -1316,7 +1317,7 @@ export function EditorialDesk({
                           <button
                             className="text-xs text-amber-400 hover:underline font-medium"
                             disabled={busy}
-                            onClick={() => onRenewJournalist(member.label, 90)}
+                            onClick={() => onRenewJournalist(member.label, 90).catch((err) => console.error(err))}
                             title="Renew subname for 90 days on ENSv2 Sepolia"
                           >
                             Renew (+90d)
@@ -1325,7 +1326,7 @@ export function EditorialDesk({
                           <button
                             className="text-xs text-rose-400 hover:underline"
                             disabled={busy}
-                            onClick={() => onRevokeJournalist(member.label)}
+                            onClick={() => onRevokeJournalist(member.label).catch((err) => console.error(err))}
                             title="Revoke subname on ENSv2 Sepolia"
                           >
                             Revoke
@@ -1368,7 +1369,7 @@ export function EditorialDesk({
                 <button
                   className="primary-button small-button"
                   disabled={busy || !newJournalistLabel || !newJournalistAddr}
-                  onClick={() => onAddJournalist({ label: newJournalistLabel, address: newJournalistAddr, readerPublicKey: newJournalistReaderKey, validForDays: newJournalistDays })}
+                  onClick={() => onAddJournalist({ label: newJournalistLabel, address: newJournalistAddr, readerPublicKey: newJournalistReaderKey, validForDays: newJournalistDays }).catch((err) => console.error(err))}
                 >
                   Mint Subname on ENSv2
                 </button>
@@ -1460,7 +1461,15 @@ export function EditorialDesk({
                 <strong className="text-sm text-amber-300 block">Rotate Encryption Keypair (On-Chain ENS)</strong>
                 <span className="text-xs text-gray-400">Current active key version: v{keyVersion}. Rotates key on Ethereum Sepolia.</span>
               </div>
-              <button className="outline-button small-button" disabled={busy} onClick={onRotateKey}>
+              <button
+                className="outline-button small-button"
+                disabled={busy}
+                onClick={() => {
+                  onRotateKey().catch((err) => {
+                    console.error('Rotate key failed:', err)
+                  })
+                }}
+              >
                 <RefreshCw size={14} /> Rotate to Version {keyVersion + 1}
               </button>
             </div>
@@ -1504,7 +1513,9 @@ export function EditorialDesk({
                 disabled={busy || !policyCategories.trim()}
                 onClick={() => {
                   const cats = policyCategories.split(',').map((c) => c.trim()).filter(Boolean)
-                  onUpdatePolicy({ categories: cats, maxBytes: policyMaxBytes, attachments: policyAttachments })
+                  onUpdatePolicy({ categories: cats, maxBytes: policyMaxBytes, attachments: policyAttachments }).catch((err) => {
+                    console.error('Update policy failed:', err)
+                  })
                 }}
               >
                 Publish Policy to ENSv2 (Sepolia)

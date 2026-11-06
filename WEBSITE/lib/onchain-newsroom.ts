@@ -1,13 +1,15 @@
 import {
   createAdmin,
   createReader,
+  ABIS,
+  ENSV2_SEPOLIA,
   type AdminStep,
   type EnsReadClient,
   type Newsroom,
 } from '@blind-report/ens-client'
 import { createNewsroomClient } from '@blind-report/newsroom-client'
 import { createMemoryChain, createStore } from '@blind-report/arkiv-store'
-import type { NewsroomPolicy } from '@blind-report/core'
+import { ENS_KEYS, type NewsroomPolicy } from '@blind-report/core'
 import {
   createPublicClient,
   createWalletClient,
@@ -40,7 +42,7 @@ export function createOnChainNewsroomDeps(
   provider: Eip1193,
   account: Address,
   options: OnChainNewsroomOptions = {}
-): NonNullable<WebsiteDeps['newsroomClient']> {
+): NonNullable<WebsiteDeps['newsroomClient']> & { ensureNewsroom: (name?: string) => Promise<Newsroom> } {
   const rpcUrl =
     options.sepoliaRpcUrl ||
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SEPOLIA_RPC_URL) ||
@@ -113,7 +115,67 @@ export function createOnChainNewsroomDeps(
     now: () => new Date(),
   })
 
+  async function ensureNewsroom(requestedName?: string): Promise<Newsroom> {
+    const existing = coreNewsroom.newsroom()
+    if (existing && (!requestedName || requestedName === existing.name || requestedName === 'Public Ledger')) {
+      return existing
+    }
+
+    let targetName = (requestedName || '').trim()
+    if (!targetName || targetName === 'Public Ledger' || !targetName.includes('.')) {
+      targetName = 'br53fd4i.eth'
+    }
+
+    const label = targetName.split('.')[0] || 'br53fd4i'
+    const ethRegistry = ENSV2_SEPOLIA.ethRegistry as Address
+
+    let resolver: Address
+    let subRegistry: Address
+    try {
+      const [r, s] = await Promise.all([
+        publicClient.readContract({
+          address: ethRegistry,
+          abi: ABIS.ethRegistry,
+          functionName: 'getResolver',
+          args: [label],
+        }) as Promise<Address>,
+        publicClient.readContract({
+          address: ethRegistry,
+          abi: ABIS.ethRegistry,
+          functionName: 'getSubregistry',
+          args: [label],
+        }) as Promise<Address>,
+      ])
+      resolver = r
+      subRegistry = s
+    } catch (err: any) {
+      throw new Error(`Falha ao consultar ENS da redação "${targetName}" na Sepolia: ${err?.message ?? err}`)
+    }
+
+    const zeroAddress = '0x0000000000000000000000000000000000000000'
+    if (!resolver || resolver === zeroAddress) {
+      if (label !== 'br53fd4i') {
+        try {
+          return await ensureNewsroom('br53fd4i.eth')
+        } catch {}
+      }
+      throw new Error(`Redação "${targetName}" não encontrada no ENSv2 da Sepolia. Cadastre a redação primeiro.`)
+    }
+
+    const newsroom: Newsroom = {
+      name: `${label}.eth`,
+      label,
+      resolver,
+      subRegistry: !subRegistry || subRegistry === zeroAddress ? resolver : subRegistry,
+    }
+
+    coreNewsroom.useNewsroom(newsroom)
+    return newsroom
+  }
+
   return {
+    ensureNewsroom,
+
     async registerNewsroom(a: {
       label: string
       categories: string[]
@@ -135,28 +197,55 @@ export function createOnChainNewsroomDeps(
       })
     },
 
-    async rotateKey(): Promise<number> {
-      return coreNewsroom.rotateKey()
+    async rotateKey(newsroomName?: string): Promise<number> {
+      const n = await ensureNewsroom(newsroomName)
+
+      let onChainVer = 0
+      try {
+        const textVer = await publicClient.getEnsText({
+          name: n.name,
+          key: ENS_KEYS.pubkeyVersion,
+          universalResolverAddress: ENSV2_SEPOLIA.universalResolver as Address,
+        })
+        if (textVer) onChainVer = Number(textVer) || 0
+      } catch {
+        try {
+          const info = await reader.resolveNewsroom(n.name)
+          onChainVer = info.pubkeyVersion ?? 0
+        } catch {}
+      }
+
+      const knownVersions = coreNewsroom.keyVersions()
+      const nextVersion = Math.max(onChainVer, ...knownVersions) + 1
+
+      return coreNewsroom.rotateKey(nextVersion)
     },
 
-    async updatePolicy(policy: NewsroomPolicy): Promise<void> {
+    async updatePolicy(policy: NewsroomPolicy, newsroomName?: string): Promise<void> {
+      await ensureNewsroom(newsroomName)
       return coreNewsroom.updatePolicy(policy)
     },
 
-    async addJournalist(a: {
-      label: string
-      address: Address
-      readerPublicKey: Uint8Array
-      validForSeconds?: number
-    }) {
+    async addJournalist(
+      a: {
+        label: string
+        address: Address
+        readerPublicKey: Uint8Array
+        validForSeconds?: number
+      },
+      newsroomName?: string
+    ) {
+      await ensureNewsroom(newsroomName)
       return coreNewsroom.addJournalist(a)
     },
 
-    async revokeJournalist(label: string) {
+    async revokeJournalist(label: string, newsroomName?: string) {
+      await ensureNewsroom(newsroomName)
       return coreNewsroom.revokeJournalist(label)
     },
 
-    async renewJournalist(label: string, validForSeconds: number) {
+    async renewJournalist(label: string, validForSeconds: number, newsroomName?: string) {
+      await ensureNewsroom(newsroomName)
       return coreNewsroom.renewJournalist(label, validForSeconds)
     },
 
@@ -168,7 +257,8 @@ export function createOnChainNewsroomDeps(
       return coreNewsroom.importSharedKeyring(blob, reader)
     },
 
-    async exportBackup(password: string): Promise<string> {
+    async exportBackup(password: string, newsroomName?: string): Promise<string> {
+      await ensureNewsroom(newsroomName)
       return coreNewsroom.exportBackup(password)
     },
 

@@ -142,12 +142,15 @@ describe('Newsroom Owner On-Chain Controller & Bridge Flows', () => {
         attachments: false,
       })
 
-      expect(mockUpdatePolicy).toHaveBeenCalledWith({
-        categories: ['saude', 'meio-ambiente'],
-        maxBytes: 300000,
-        attachments: false,
-        epoch: 'monthly',
-      })
+      expect(mockUpdatePolicy).toHaveBeenCalledWith(
+        {
+          categories: ['saude', 'meio-ambiente'],
+          maxBytes: 300000,
+          attachments: false,
+          epoch: 'monthly',
+        },
+        'jornal-livre.eth'
+      )
 
       expect(controller.state.editorialPolicy).toEqual({
         categories: ['saude', 'meio-ambiente'],
@@ -178,12 +181,15 @@ describe('Newsroom Owner On-Chain Controller & Bridge Flows', () => {
         validForDays: 120,
       })
 
-      expect(mockAdd).toHaveBeenCalledWith({
-        label: 'clara',
-        address: '0x1234567890123456789012345678901234567890',
-        readerPublicKey: readerKp.publicKey,
-        validForSeconds: 120 * 86400,
-      })
+      expect(mockAdd).toHaveBeenCalledWith(
+        {
+          label: 'clara',
+          address: '0x1234567890123456789012345678901234567890',
+          readerPublicKey: readerKp.publicKey,
+          validForSeconds: 120 * 86400,
+        },
+        'jornal-livre.eth'
+      )
 
       const added = controller.state.team.find((t) => t.label === 'clara')
       expect(added).toBeDefined()
@@ -204,7 +210,7 @@ describe('Newsroom Owner On-Chain Controller & Bridge Flows', () => {
 
       await controller.revokeJournalist('reporter')
 
-      expect(mockRevoke).toHaveBeenCalledWith('reporter')
+      expect(mockRevoke).toHaveBeenCalledWith('reporter', 'Public Ledger')
       expect(controller.state.team[0].active).toBe(false)
       expect(controller.state.notice).toContain('revoked on ENSv2')
     })
@@ -221,7 +227,7 @@ describe('Newsroom Owner On-Chain Controller & Bridge Flows', () => {
 
       await controller.renewJournalist('reporter', 90)
 
-      expect(mockRenew).toHaveBeenCalledWith('reporter', 90 * 86400)
+      expect(mockRenew).toHaveBeenCalledWith('reporter', 90 * 86400, 'Public Ledger')
       expect(controller.state.notice).toContain('renewed for +90 days on ENSv2')
     })
 

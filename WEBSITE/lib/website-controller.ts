@@ -179,12 +179,13 @@ export type WebsiteDeps = {
     annotate?(opts: any): Promise<void>
     reply?(item: any, text: string): Promise<any>
     registerNewsroom?(a: any): Promise<any>
-    rotateKey?(): Promise<number>
-    updatePolicy?(policy: any): Promise<void>
-    addJournalist?(a: any): Promise<void>
-    revokeJournalist?(label: string): Promise<any>
-    renewJournalist?(label: string, validForSeconds: number): Promise<void>
-    exportBackup?(password: string): Promise<string>
+    rotateKey?(newsroomName?: string): Promise<number>
+    updatePolicy?(policy: any, newsroomName?: string): Promise<void>
+    addJournalist?(a: any, newsroomName?: string): Promise<void>
+    revokeJournalist?(label: string, newsroomName?: string): Promise<any>
+    renewJournalist?(label: string, validForSeconds: number, newsroomName?: string): Promise<void>
+    exportBackup?(password: string, newsroomName?: string): Promise<string>
+    ensureNewsroom?(name?: string): Promise<any>
     importBackup?(blob: string, password: string): Promise<void>
     shareKeyring?(readerPublicKey: Uint8Array): string
     importSharedKeyring?(blob: string, reader: Keypair): void
@@ -554,6 +555,11 @@ export function createWebsiteController(
           const role = isOwner ? 'admin' : isReporter ? 'journalist' : 'visitor'
           const journalistName = isReporter ? SHOWCASE_ACCOUNTS.reporterSubname : undefined
 
+          let activeNewsroom = state.selectedNewsroom
+          if (isOwner || isReporter || activeNewsroom === 'Public Ledger') {
+            activeNewsroom = 'br53fd4i.eth'
+          }
+
           if (!deps.newsroomClient) {
             try {
               deps.newsroomClient = createOnChainNewsroomDeps(p, address as Address, {
@@ -569,10 +575,15 @@ export function createWebsiteController(
             }
           }
 
+          if (deps.newsroomClient?.ensureNewsroom) {
+            deps.newsroomClient.ensureNewsroom(activeNewsroom).catch(() => {})
+          }
+
           set({
             walletAddress: address,
             role,
             journalistName,
+            selectedNewsroom: activeNewsroom,
             sessionStatus: 'ready',
             walletMode: 'injected',
             busy: false,
@@ -667,7 +678,7 @@ export function createWebsiteController(
       try {
         let nextVer = state.keyVersion + 1
         if (deps.newsroomClient?.rotateKey) {
-          nextVer = await deps.newsroomClient.rotateKey()
+          nextVer = await deps.newsroomClient.rotateKey(state.selectedNewsroom)
         } else if (state.appMode === 'production') {
           throw new Error('Web3 wallet connected to Sepolia is required to rotate newsroom key on ENSv2.')
         }
@@ -691,10 +702,13 @@ export function createWebsiteController(
       set({ busy: true, error: null })
       try {
         if (deps.newsroomClient?.updatePolicy) {
-          await deps.newsroomClient.updatePolicy({
-            ...policy,
-            epoch: 'monthly',
-          })
+          await deps.newsroomClient.updatePolicy(
+            {
+              ...policy,
+              epoch: 'monthly',
+            },
+            state.selectedNewsroom
+          )
         } else if (state.appMode === 'production') {
           throw new Error('Web3 wallet connected to Sepolia is required to update policy on ENSv2.')
         }
@@ -762,12 +776,15 @@ export function createWebsiteController(
       try {
         if (deps.newsroomClient?.addJournalist) {
           const readerKeyBytes = fromBase64Url(member.readerPublicKey)
-          await deps.newsroomClient.addJournalist({
-            label: member.label,
-            address: member.address as `0x${string}`,
-            readerPublicKey: readerKeyBytes,
-            validForSeconds: (member.validForDays ?? 180) * 86400,
-          })
+          await deps.newsroomClient.addJournalist(
+            {
+              label: member.label,
+              address: member.address as `0x${string}`,
+              readerPublicKey: readerKeyBytes,
+              validForSeconds: (member.validForDays ?? 180) * 86400,
+            },
+            state.selectedNewsroom
+          )
         } else if (state.appMode === 'production') {
           throw new Error('Web3 wallet connected to Sepolia is required to delegate subname on ENSv2.')
         }
@@ -789,7 +806,7 @@ export function createWebsiteController(
       set({ busy: true, error: null })
       try {
         if (deps.newsroomClient?.revokeJournalist) {
-          await deps.newsroomClient.revokeJournalist(label)
+          await deps.newsroomClient.revokeJournalist(label, state.selectedNewsroom)
         } else if (state.appMode === 'production') {
           throw new Error('Web3 wallet connected to Sepolia is required to revoke journalist subname on ENSv2.')
         }
@@ -810,7 +827,7 @@ export function createWebsiteController(
       try {
         const validForSeconds = validForDays * 86400
         if (deps.newsroomClient?.renewJournalist) {
-          await deps.newsroomClient.renewJournalist(label, validForSeconds)
+          await deps.newsroomClient.renewJournalist(label, validForSeconds, state.selectedNewsroom)
         } else if (state.appMode === 'production') {
           throw new Error('Web3 wallet connected to Sepolia is required to renew journalist subname on ENSv2.')
         }
