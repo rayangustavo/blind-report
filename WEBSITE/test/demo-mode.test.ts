@@ -125,19 +125,32 @@ describe('WEBSITE - Separação Arquitetural: Modo Produção (/) vs Modo Demo (
       expect(controller.state.notice).toContain('World ID ZKP Proof fast-tracked')
     })
 
-    it('a página /demo (app/demo/page.tsx) contém banner explicativo, toolbar rápida e storyboard de avaliação', () => {
+    it('permite carregar dados de exemplo in-place sem saltar de tela ou de etapa', () => {
+      const controller = createWebsiteController({}, undefined, { mode: 'demo' })
+      controller.navigate('report')
+      controller.setReportStep(2)
+
+      controller.loadDemoScenario('procurement', { navigateToStep2: false })
+
+      expect(controller.state.view).toBe('report')
+      expect(controller.state.reportStep).toBe(2)
+      expect(controller.state.message).toContain('$14.2M')
+      expect(controller.state.attachment?.name).toBe('audit-procurement-contracts.csv')
+    })
+
+    it('a página /demo (app/demo/page.tsx) é limpa: usa DemoTopBar e elimina banners pesados de explicação', () => {
       const demoPagePath = join(APP_DIR, 'demo/page.tsx')
       expect(existsSync(demoPagePath)).toBe(true)
       const src = readFileSync(demoPagePath, 'utf8')
 
-      // Componentes de apoio à avaliação
-      expect(src).toContain('EvaluatorBanner')
-      expect(src).toContain('JuryStoryboard')
-      expect(src).toContain('demo-quick-bar')
-      expect(src).toContain('Procurement Corruption')
-      expect(src).toContain('Switch Role:')
-      expect(src).toContain('Demo Owner')
-      expect(src).toContain('Demo Reporter')
+      // Deve usar o DemoTopBar minimalista
+      expect(src).toContain('DemoTopBar')
+      expect(src).toContain('onSelectRole')
+
+      // Não deve poluir a interface com banners pesados ou storyboards cheios de código
+      expect(src).not.toContain('EvaluatorBanner')
+      expect(src).not.toContain('JuryStoryboard')
+      expect(src).not.toContain('demo-quick-bar')
     })
   })
 
