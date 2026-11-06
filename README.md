@@ -12,14 +12,20 @@ O **Blind Report** é uma plataforma que permite a qualquer cidadão ou fonte en
 - **Prevenção de Spam com World ID**: Prova de humanidade de conhecimento zero (ZKP) garantindo no máximo 1 denúncia por pessoa por período (época) por redação, sem revelar a identidade da fonte.
 - **Privacidade Extrema**: Sem logs de IP, sem trackers, código estático sem chamadas externas ocultas e guardrails rígidos contra vazamento de rede.
 
-## 🏆 ETHGlobal Mumbai — Partner Prizes
+## 🏆 ETHGlobal Mumbai — Partner Prizes & Showcase
 
-Este projeto concorre ativamente aos seguintes **Partner Prizes** no ETHGlobal Mumbai:
+Este projeto concorre aos seguintes **Partner Prizes** no [ETHGlobal Mumbai](https://ethglobal.com/events/mumbai):
 1. **ENS (Ethereum Name Service)**: PKI descentralizada para chaves e políticas em text records + subnomes delegados para jornalistas.
 2. **Arkiv Network**: Persistência descentralizada de envelopes com ciclo de vida, expiração por blocos, custódia e renovação.
 3. **World ID (Worldcoin)**: Prova de Humanidade ZKP (Protocolo 4.0) e nullifiers amarrados à ação para mitigação de spam e Sybil.
 
-👉 **Consulte [PARTNER_PRIZES.md](PARTNER_PRIZES.md) para detalhes técnicos da arquitetura, chamadas de SDK e feedback dos parceiros.**
+### 📚 Documentos de Submissão & Arquitetura
+- 📑 [PARTNER_PRIZES.md](PARTNER_PRIZES.md): Arquitetura dos 3 parceiros, SDKs e feedbacks técnicos.
+- 🛡️ [THREAT_MODEL.md](THREAT_MODEL.md): Modelo de ameaças formais, criptografia (Libsodium) e garantias de anonimato.
+- 🎬 [DEMO_SCRIPT.md](DEMO_SCRIPT.md): Roteiro e storyboard para o vídeo de demonstração oficial de 2 a 4 minutos.
+- 🌐 [DEPLOYMENTS.md](DEPLOYMENTS.md): Endereços de contratos, parâmetros de rede e verificação on-chain na Sepolia.
+- 🤖 [SPEC_ATTRIBUTION.md](SPEC_ATTRIBUTION.md): Registro de atribuição de IA e desenvolvimento dirigido por especificações.
+
 
 ## Estrutura do Monorepo
 
