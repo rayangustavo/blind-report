@@ -22,6 +22,7 @@
     "validation": "tsx",
     "test:integration": "bash tests/run-integration.sh",
     "test:e2e": "bash tests/run-e2e.sh",
+    "test:partners": "vitest run tests/e2e/partner-prizes.test.ts",
     "relayer": "node --env-file=.env --import tsx apps/relayer/src/main.ts",
     "demo": "node --import tsx scripts/demo-flow.ts",
     "test:all": "bash scripts/test-all.sh",
