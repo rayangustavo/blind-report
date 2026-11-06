@@ -9,6 +9,9 @@ import { setupScrolly } from "./motion.ts";
 // Substituído pelo esbuild: true na demo simulada, false no app real.
 declare const __DEMO_MODE__: boolean;
 const DEMO_MODE = typeof __DEMO_MODE__ === "boolean" ? __DEMO_MODE__ : true;
+// Na demo o nome é ilustrativo; no app real, aponta para a redação de teste
+// publicada on-chain na Sepolia (ENSv2 + text records).
+const DEFAULT_NEWSROOM = DEMO_MODE ? "investiga.eth" : "redacao.eth";
 
 type Tab = "enviar" | "respostas" | "verificar";
 type Route = "inicio" | "sobre" | "respostas" | "verificar";
@@ -316,8 +319,8 @@ async function start() {
 
   function viewSend(s: SourceState): Node {
     if (s.step === "newsroom") {
-      const name = h("input", { type: "text", id: "nr", placeholder: "investiga.eth", autocomplete: "off" }) as HTMLInputElement;
-      name.value = (document.getElementById("nr") as HTMLInputElement | null)?.value ?? "investiga.eth";
+      const name = h("input", { type: "text", id: "nr", placeholder: DEFAULT_NEWSROOM, autocomplete: "off" }) as HTMLInputElement;
+      name.value = (document.getElementById("nr") as HTMLInputElement | null)?.value ?? DEFAULT_NEWSROOM;
       return h(
         "section",
         { className: "panel" },
@@ -325,6 +328,9 @@ async function start() {
         stepper(s.step),
         err(s),
         field("Nome da redação (ENS)", "nr", name),
+        !DEMO_MODE
+          ? h("p", { className: "lookup-hint" }, "Redação publicada na Sepolia para teste: ", h("code", {}, DEFAULT_NEWSROOM), ".")
+          : null,
         h(
           "div",
           { className: "actions" },
@@ -474,7 +480,7 @@ async function start() {
         h(
           "div",
           { className: "ticket-grid" },
-          ticketCell("Redação", s.newsroom?.name ?? String(receipt?.newsroom ?? "investiga.eth")),
+          ticketCell("Redação", s.newsroom?.name ?? String(receipt?.newsroom ?? DEFAULT_NEWSROOM)),
           ticketCell("Categoria", lastCategory),
           ticketCell("Protocolo", protocol, true),
           ticketCell("Hash do conteúdo", shortHash, true),
@@ -559,8 +565,8 @@ async function start() {
   }
 
   function viewVerify(s: SourceState): Node {
-    const nr = h("input", { type: "text", id: "vnr", placeholder: "investiga.eth" }) as HTMLInputElement;
-    nr.value = "investiga.eth";
+    const nr = h("input", { type: "text", id: "vnr", placeholder: DEFAULT_NEWSROOM }) as HTMLInputElement;
+    nr.value = DEFAULT_NEWSROOM;
     const file = h("input", { type: "file", id: "vf" }) as HTMLInputElement;
     const receipt = h("textarea", { id: "vrc", placeholder: "Recibo (para provar autoria)" }) as HTMLTextAreaElement;
     const text = h("textarea", { id: "vtx", placeholder: "Texto original" }) as HTMLTextAreaElement;
@@ -1318,7 +1324,7 @@ async function start() {
       { icon: "eyeOff", label: "Você", sub: "dispositivo local", cls: "" },
       { icon: "lock", label: "Cifra", sub: "libsodium", cls: "is-accent" },
       { icon: "cube", label: "Arkiv", sub: "custódia imutável", cls: "" },
-      { icon: "shield", label: "Redação", sub: "investiga.eth", cls: "is-ok" },
+      { icon: "shield", label: "Redação", sub: DEFAULT_NEWSROOM, cls: "is-ok" },
     ];
     const flow: HTMLElement[] = [];
     nodes.forEach((node, i) => {
@@ -1351,7 +1357,7 @@ async function start() {
         stat("0", "IPs registrados"),
         stat("100%", "criptografia E2E"),
         stat("ZK", "prova de humanidade"),
-        h("code", { className: "console-scope" }, "scope=investiga.eth · v3"),
+        h("code", { className: "console-scope" }, `scope=${DEFAULT_NEWSROOM} · v${DEMO_MODE ? 3 : 1}`),
       ),
     );
   }
@@ -1519,7 +1525,7 @@ async function start() {
             },
             "Denunciar",
           ),
-          h("span", { className: "status-pill" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), DEMO_MODE ? "Demonstração" : "Testnet"),
+          h("span", { className: "status-pill" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), DEMO_MODE ? "Demonstração" : "Sepolia"),
         ),
       ),
     );
