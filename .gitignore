@@ -17,3 +17,6 @@ person-2/
 person-3/
 planejamento/
 *.plan.md
+
+# Demo build output
+apps/web-source/demo-dist

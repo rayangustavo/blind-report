@@ -24,6 +24,7 @@
     "test:e2e": "bash tests/run-e2e.sh",
     "relayer": "node --env-file=.env --import tsx apps/relayer/src/main.ts",
     "web:source": "npm run build -w apps/web-source && node scripts/serve.mjs apps/web-source/dist 5173",
+    "web:source:demo": "node apps/web-source/build-demo.mjs && node scripts/serve.mjs apps/web-source/demo-dist 5173",
     "web:newsroom": "npm run build -w apps/web-newsroom && node scripts/serve.mjs apps/web-newsroom/dist 5174",
     "links": "node --env-file=.env scripts/links.mjs",
     "arkiv:query": "node --env-file-if-exists=.env --import tsx arkiv/query.ts"
