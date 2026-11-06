@@ -36,8 +36,6 @@
     "web:dev": "npm --prefix WEBSITE run dev",
     "web:build": "npm --prefix WEBSITE run build",
     "web:start": "npm --prefix WEBSITE run start",
-    "web:source": "npm --prefix WEBSITE run dev",
-    "web:newsroom": "npm --prefix WEBSITE run dev",
     "links": "node --env-file=.env scripts/links.mjs",
     "keys:generate": "node scripts/generate-keys.mjs",
     "arkiv:query": "node --env-file-if-exists=.env --import tsx arkiv/query.ts",

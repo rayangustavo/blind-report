@@ -17,7 +17,7 @@ function make(account = admin, over: { resolve?: () => Promise<unknown>; owners?
     resolveNewsroom: vi.fn(over.resolve ?? (async () => ({ custodian: admin.address }) as never)) as never,
     journalistOwner: vi.fn(async (n: string) => (over.owners ?? { [`maria.${NR}`]: maria.address })[n] ?? null) as never,
   };
-  const session = createSession({ wallet: createWallet(w.provider), login: createLogin({ now: () => NOW }), reader, domain: "127.0.0.1:5174", chain: SEPOLIA_SPEC });
+  const session = createSession({ wallet: createWallet(w.provider), login: createLogin({ now: () => NOW }), reader, domain: "127.0.0.1:3000", chain: SEPOLIA_SPEC });
   return { w, session, reader };
 }
 
