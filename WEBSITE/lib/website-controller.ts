@@ -366,11 +366,11 @@ export function createWebsiteController(
       set({ appMode: mode })
     },
 
-    setLastTx(tx: { hash: string; label: string; chainId?: string }) {
+    setLastTx(tx: { hash: string; label: string; chainId?: string; url?: string }) {
       const chainId = tx.chainId ?? SEPOLIA_SPEC.chainId
       const explorer = SEPOLIA_SPEC.blockExplorerUrls[0] ?? 'https://sepolia.etherscan.io'
-      const cleanHash = tx.hash.startsWith('0x') ? tx.hash : `0x${tx.hash}`
-      const url = `${explorer.replace(/\/+$/, '')}/tx/${cleanHash}`
+      const cleanHash = tx.hash.replace(/^(0x)+/, '0x')
+      const url = tx.url ?? `${explorer.replace(/\/+$/, '')}/tx/${cleanHash}`
       const record: OnChainTxRecord = {
         hash: cleanHash,
         label: tx.label,
@@ -902,7 +902,7 @@ export function createWebsiteController(
         )
 
         const rawEnv = encodeEnvelope(envelope)
-        let receiptKey = '0x' + Array.from(envelope.contentHash).join('')
+        let receiptKey = envelope.contentHash.replace(/^(0x)+/, '0x')
         if (receiptKey.length > 66) receiptKey = receiptKey.slice(0, 66)
 
         if (deps.sourceClient?.submit) {
@@ -957,9 +957,10 @@ export function createWebsiteController(
           notice: `Tip encrypted with Libsodium, verified via World ID ZKP, and anchored on Arkiv via Relayer sponsorship!`,
         })
 
-        const onchainHash = receiptKey.length === 66
-          ? receiptKey
-          : ('0x' + receiptKey.replace(/^0x/, '').padEnd(64, '0').slice(0, 64))
+        const cleanReceiptKey = receiptKey.replace(/^(0x)+/, '0x')
+        const onchainHash = cleanReceiptKey.length === 66
+          ? cleanReceiptKey
+          : ('0x' + cleanReceiptKey.replace(/^0x/, '').padEnd(64, '0').slice(0, 64))
         controller.setLastTx({
           hash: onchainHash,
           label: `Tip Encrypted & Gas-Sponsored on Arkiv via Relayer (${SHOWCASE_ACCOUNTS.relayer.slice(0, 6)}...${SHOWCASE_ACCOUNTS.relayer.slice(-4)})`,
