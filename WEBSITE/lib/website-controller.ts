@@ -993,7 +993,12 @@ export function createWebsiteController(
       }
     },
 
-    verifyAuthorship(input: { text: string; salt: Uint8Array; rawEnvelope?: Uint8Array }) {
+    verifyAuthorship(input: {
+      text: string
+      salt: Uint8Array
+      rawEnvelope?: Uint8Array
+      attachment?: { name: string; data: Uint8Array }
+    }) {
       set({ busy: true, error: null, authorshipResult: null })
       try {
         const envBytes = input.rawEnvelope ?? state.receipt?.rawEnvelope
@@ -1006,8 +1011,16 @@ export function createWebsiteController(
         }
 
         const env = decodeEnvelope(envBytes)
-        const payload = encodePayload({ text: input.text })
-        const isValid = verifyCommitment(env, payload, input.salt)
+        let payload = encodePayload({ text: input.text, attachment: input.attachment })
+        let isValid = verifyCommitment(env, payload, input.salt)
+
+        if (!isValid && !input.attachment && state.attachment) {
+          payload = encodePayload({
+            text: input.text,
+            attachment: { name: state.attachment.name, data: state.attachment.bytes ?? new Uint8Array() },
+          })
+          isValid = verifyCommitment(env, payload, input.salt)
+        }
 
         const authorshipResult = isValid
           ? { valid: true, message: 'Authorship proven mathematically! The hash and cryptographic salt strictly match the sealed Arkiv envelope commitment.' }
