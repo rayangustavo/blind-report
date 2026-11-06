@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createPublicClient, http, type Address, type Hex } from "viem";
+import { createPublicClient, createWalletClient, http, type Address, type Hex } from "viem";
 import { sepolia } from "viem/chains";
 import { createPublicClient as createArkivClient, createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk";
 import { rabdi } from "@arkiv-network/sdk/chains";
@@ -116,25 +116,31 @@ describe("🌐 Sepolia & Testnets Live Integration Suite", () => {
     expect(isAllowed(config.networkPolicy, "https://rpc.rabdi.db-chain.testnet.arkiv.network")).toBe(true);
   });
 
-  it("valida saldo em SepoliaETH e capacidade de transação on-chain da conta OWNER", async () => {
+  it("submete transação on-chain real na Sepolia e confirma no Etherscan", async () => {
     const pk = (process.env.OWNER_PRIVATE_KEY || "").trim() as Hex;
     expect(pk).toMatch(/^0x[0-9a-fA-F]{64}$/);
 
     const account = privateKeyToAccount(pk);
     const client = createPublicClient({ chain: sepolia, transport: http(sepoliaRpc) });
-    const balance = await client.getBalance({ address: account.address });
+    const wallet = createWalletClient({ account, chain: sepolia, transport: http(sepoliaRpc) });
 
-    // Confirma que a conta possui saldo ativo na Sepolia (> 0.01 SepoliaETH)
+    const balance = await client.getBalance({ address: account.address });
     expect(balance).toBeGreaterThan(10_000_000_000_000_000n);
 
-    // Simula transação de mint do mockUSDC para registro no ENSv2 da Sepolia
-    const sim = await client.simulateContract({
+    // Submete transação real de mint no contrato mockUSDC da ENSv2
+    const hash = await wallet.writeContract({
       address: ENSV2_SEPOLIA.mockUSDC,
       abi: ABIS.mockUSDC,
       functionName: "mint",
-      args: [account.address, 100_000_000n],
-      account,
+      args: [account.address, 10_000_000n],
     });
-    expect(sim.request).toBeDefined();
+
+    expect(hash).toMatch(/^0x[0-9a-fA-F]{64}$/);
+    console.log(`\n  🔗 Transação On-Chain na Sepolia: https://sepolia.etherscan.io/tx/${hash}`);
+
+    // Aguarda mineração e confirmação no bloco da Sepolia
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    expect(receipt.status).toBe("success");
+    expect(receipt.blockNumber).toBeGreaterThan(12_000_000n);
   });
 });

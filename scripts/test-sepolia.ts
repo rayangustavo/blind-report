@@ -5,12 +5,12 @@
  * Utiliza as credenciais e parâmetros configurados no arquivo .env
  */
 
-import { createPublicClient, formatEther, http, type Address } from "viem";
+import { createPublicClient, createWalletClient, formatEther, http, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { createPublicClient as createArkivClient, createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk";
 import { rabdi } from "@arkiv-network/sdk/chains";
-import { createReader, ENSV2_SEPOLIA, type EnsReadClient } from "@blind-report/ens-client";
+import { ABIS, createReader, ENSV2_SEPOLIA, type EnsReadClient } from "@blind-report/ens-client";
 import { createSdkBackend, type EntityKind, KIND_ATTRS } from "@blind-report/arkiv-store";
 import { createRpContextSigner } from "@blind-report/worldid-gate";
 import { loadConfig, redact } from "../apps/relayer/src/config.ts";
@@ -148,6 +148,34 @@ async function run() {
   const testName = `test-${Date.now().toString(36)}.eth`;
   const isAvail = await reader.isNameAvailable(testName);
   logOk(`Consulta ENSv2 isAvailable("${testName}") respondida: ${isAvail ? "Livre" : "Ocupado"}`);
+
+  // 4.1 Submissão de Transação Real On-Chain na Sepolia
+  const ownerPk = (process.env.OWNER_PRIVATE_KEY || "").trim() as Hex;
+  if (hasGas && /^0x[0-9a-fA-F]{64}$/.test(ownerPk)) {
+    logHeader("4.1 Transação On-Chain Real na Sepolia (Verificável no Explorer)");
+    try {
+      const ownerAccount = privateKeyToAccount(ownerPk);
+      const ownerWallet = createWalletClient({ account: ownerAccount, chain: sepolia, transport: http(sepoliaRpc) });
+
+      console.log(`  ${CYAN}Enviando transação on-chain para a Sepolia...${RESET}`);
+      const txHash = await ownerWallet.writeContract({
+        address: ENSV2_SEPOLIA.mockUSDC,
+        abi: ABIS.mockUSDC,
+        functionName: "mint",
+        args: [ownerAccount.address, 10_000_000n],
+      });
+
+      logOk(`Transação enviada e transmitida ao mempool da Sepolia!`);
+      logDetail("TX HASH", txHash);
+      logDetail("Link Etherscan", `https://sepolia.etherscan.io/tx/${txHash}`);
+
+      console.log(`  ${YELLOW}Aguardando mineração do bloco na Sepolia...${RESET}`);
+      const receipt = await sepoliaClient.waitForTransactionReceipt({ hash: txHash });
+      logOk(`Transação CONFIRMADA on-chain no bloco ${receipt.blockNumber}! (Gás usado: ${receipt.gasUsed})`);
+    } catch (err: unknown) {
+      logError(`Falha ao emitir transação on-chain: ${(err as Error).message}`);
+    }
+  }
 
   // 5. Testnet Arkiv Rabdi
   logHeader("5. Arkiv Network — Testnet Rabdi (Chain ID 7794095)");
