@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Blind Report — Informação protegida',
-  description: 'Canal seguro para denúncias anônimas e jornalismo de interesse público.',
+  title: 'Blind Report — Protected Information',
+  description: 'Secure channel for anonymous tips and public-interest journalism.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -39,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="en">
       <body className="antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

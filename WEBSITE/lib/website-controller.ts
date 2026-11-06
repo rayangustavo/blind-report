@@ -7,10 +7,10 @@
 export type ReportStatus = 'unread' | 'in_review' | 'investigating' | 'archived'
 
 export const STATUS_LABELS: Record<string, string> = {
-  unread: 'Não lida',
-  in_review: 'Em análise',
-  investigating: 'Investigando',
-  archived: 'Arquivada',
+  unread: 'Unread',
+  in_review: 'In review',
+  investigating: 'Investigating',
+  archived: 'Archived',
 }
 
 export type ReportItem = {
@@ -19,7 +19,7 @@ export type ReportItem = {
   category: string
   status: ReportStatus
   date: string
-  priority: 'Alta' | 'Média' | 'Baixa'
+  priority: 'High' | 'Medium' | 'Low' | 'Alta' | 'Média' | 'Baixa'
   initials: string
   text?: string
   decrypted?: boolean
@@ -75,21 +75,21 @@ export type WebsiteDeps = {
 }
 
 export const INITIAL_MOCK_REPORTS: ReportItem[] = [
-  { id: 'BR-8421', title: 'Contratos de publicidade e conflito de interesse', category: 'Corrupção', status: 'investigating', date: 'Hoje, 09:42', priority: 'Alta', initials: 'CO', text: 'Documentação sobre contratos sem licitação.' },
-  { id: 'BR-8418', title: 'Obra pública parada há 14 meses', category: 'Políticas públicas', status: 'in_review', date: 'Ontem, 18:16', priority: 'Média', initials: 'PP', text: 'Relatório fotográfico da obra paralisada na rodovia estadual.' },
-  { id: 'BR-8412', title: 'Assédio e retaliação em órgão estadual', category: 'Direitos humanos', status: 'unread', date: 'Ontem, 14:03', priority: 'Alta', initials: 'DH', text: 'Denúncia sigilosa sobre perseguição institucional.' },
-  { id: 'BR-8407', title: 'Licitação com empresa recém-criada', category: 'Corrupção', status: 'archived', date: '12 jun, 11:28', priority: 'Baixa', initials: 'CO', text: 'Edital direcionado para empresa fundada 3 dias antes.' },
+  { id: 'BR-8421', title: 'Advertising contracts and conflict of interest', category: 'Corruption', status: 'investigating', date: 'Today, 09:42', priority: 'High', initials: 'CO', text: 'Documentation on contracts without public tender.' },
+  { id: 'BR-8418', title: 'Public works stalled for 14 months', category: 'Public policy', status: 'in_review', date: 'Yesterday, 18:16', priority: 'Medium', initials: 'PP', text: 'Photographic report of stalled highway construction.' },
+  { id: 'BR-8412', title: 'Harassment and retaliation in state agency', category: 'Human rights', status: 'unread', date: 'Yesterday, 14:03', priority: 'High', initials: 'DH', text: 'Confidential report on institutional harassment.' },
+  { id: 'BR-8407', title: 'Tender with newly formed company', category: 'Corruption', status: 'archived', date: 'Jun 12, 11:28', priority: 'Low', initials: 'CO', text: 'Procurement targeted at company founded 3 days prior.' },
 ]
 
 export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: ReportItem[] = INITIAL_MOCK_REPORTS) {
   let state: WebsiteControllerState = {
     view: 'home',
     reportStep: 1,
-    selectedNewsroom: 'Folha Pública',
+    selectedNewsroom: 'Public Ledger',
     selectedCategory: '',
     message: '',
     receipt: null,
-    filter: 'Todos os status',
+    filter: 'All statuses',
     searchQuery: '',
     reports: [...initialReports],
     selectedReport: initialReports[0] ?? null,
@@ -170,11 +170,11 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
 
     async submitReport(): Promise<WebsiteReceipt> {
       if (!state.selectedCategory) {
-        set({ error: 'Selecione uma categoria para a denúncia.' })
+        set({ error: 'Please select a category for the tip.' })
         throw new Error('Categoria ausente')
       }
       if (state.message.trim().length < 10) {
-        set({ error: 'A denúncia deve conter ao menos 10 caracteres.' })
+        set({ error: 'The tip must contain at least 10 characters.' })
         throw new Error('Mensagem curta demais')
       }
 
@@ -214,7 +214,7 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
           salt,
           mailboxPriv,
           mailboxPub,
-          date: 'Agora',
+          date: 'Just now',
           text: state.message,
         }
 
@@ -224,8 +224,8 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
           title: state.message.slice(0, 50) + (state.message.length > 50 ? '...' : ''),
           category: state.selectedCategory,
           status: 'unread',
-          date: 'Agora',
-          priority: 'Alta',
+          date: 'Just now',
+          priority: 'High',
           initials: state.selectedCategory.slice(0, 2).toUpperCase(),
           text: state.message,
           decrypted: false,
@@ -242,7 +242,7 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
 
         return receipt
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Falha ao enviar denúncia.' })
+        set({ busy: false, error: err?.message ?? 'Failed to submit tip.' })
         throw err
       }
     },
@@ -257,11 +257,11 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
               const existing = state.reports.find((r) => r.receiptKey === it.key)
               return {
                 id: existing?.id ?? `BR-${8400 + idx}`,
-                title: existing?.title ?? (it.category ? `Denúncia recebida (${it.category})` : `Denúncia recebida #${it.key.slice(0, 8)}`),
-                category: it.category ?? 'Investigação',
+                title: existing?.title ?? (it.category ? `Tip received (${it.category})` : `Tip received #${it.key.slice(0, 8)}`),
+                category: it.category ?? 'Investigation',
                 status: (it.status as ReportStatus) ?? existing?.status ?? 'unread',
-                date: 'Recente',
-                priority: 'Alta',
+                date: 'Recent',
+                priority: 'High',
                 initials: (it.category ?? 'IN').slice(0, 2).toUpperCase(),
                 decrypted: existing?.decrypted ?? false,
                 text: existing?.text,
@@ -273,7 +273,7 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
           }
         }
       } catch (err: any) {
-        set({ error: err?.message ?? 'Falha ao carregar inbox da redação.' })
+        set({ error: err?.message ?? 'Failed to load newsroom inbox.' })
       } finally {
         set({ busy: false })
       }
@@ -281,7 +281,7 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
 
     async decryptSelectedReport(): Promise<string> {
       const selected = state.selectedReport
-      if (!selected) throw new Error('Nenhuma denúncia selecionada')
+      if (!selected) throw new Error('No tip selected')
 
       if (selected.decrypted && selected.text) {
         return selected.text
@@ -289,7 +289,7 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
 
       set({ busy: true, error: null })
       try {
-        let text = selected.text ?? 'Conteúdo sigiloso da denúncia descriptografado com sucesso.'
+        let text = selected.text ?? 'Confidential tip content decrypted successfully.'
         if (deps.newsroomClient?.decrypt && selected.rawItem) {
           const dec = await deps.newsroomClient.decrypt(selected.rawItem)
           text = dec.text
@@ -307,14 +307,14 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
         })
         return text
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Falha ao decifrar denúncia.' })
+        set({ busy: false, error: err?.message ?? 'Failed to decrypt tip.' })
         throw err
       }
     },
 
     async saveInternalNote(note: string) {
       const selected = state.selectedReport
-      if (!selected) throw new Error('Nenhuma denúncia selecionada')
+      if (!selected) throw new Error('No tip selected')
 
       set({ busy: true, error: null })
       try {
@@ -334,14 +334,14 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
           selectedReport: { ...selected, internalNote: note },
         })
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Falha ao salvar nota interna.' })
+        set({ busy: false, error: err?.message ?? 'Failed to save internal note.' })
         throw err
       }
     },
 
     async updateReportStatus(newStatus: ReportStatus) {
       const selected = state.selectedReport
-      if (!selected) throw new Error('Nenhuma denúncia selecionada')
+      if (!selected) throw new Error('No tip selected')
 
       set({ busy: true, error: null })
       try {
@@ -358,14 +358,14 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
           selectedReport: { ...selected, status: newStatus },
         })
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Falha ao atualizar status.' })
+        set({ busy: false, error: err?.message ?? 'Failed to update status.' })
         throw err
       }
     },
 
     async replyToReport(replyText: string) {
       const selected = state.selectedReport
-      if (!selected) throw new Error('Nenhuma denúncia selecionada')
+      if (!selected) throw new Error('No tip selected')
 
       set({ busy: true, error: null })
       try {
@@ -379,14 +379,14 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
           replies: [...state.replies, newReply],
         })
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Falha ao enviar resposta da redação.' })
+        set({ busy: false, error: err?.message ?? 'Failed to send newsroom reply.' })
         throw err
       }
     },
 
     async readRepliesWithReceipt(receiptToUse?: any) {
       const targetReceipt = receiptToUse ?? state.receipt
-      if (!targetReceipt) throw new Error('Nenhum recibo para consulta de resposta')
+      if (!targetReceipt) throw new Error('No receipt provided to check replies')
 
       set({ busy: true, error: null })
       try {
@@ -397,7 +397,7 @@ export function createWebsiteController(deps: WebsiteDeps = {}, initialReports: 
         }
         return state.replies
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Falha ao consultar respostas.' })
+        set({ busy: false, error: err?.message ?? 'Failed to fetch replies.' })
         throw err
       }
     },

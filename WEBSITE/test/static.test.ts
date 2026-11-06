@@ -50,8 +50,8 @@ describe('WEBSITE - Análise Estática de Assets e Configuração', () => {
     expect(existsSync(layoutPath)).toBe(true)
     const layout = readFileSync(layoutPath, 'utf8')
 
-    // Deve usar pt-BR ou lang apropriado e metadados
-    expect(layout).toContain('lang="pt-BR"')
+    // Deve usar en ou lang apropriado e metadados
+    expect(layout).toMatch(/lang="(en|pt-BR)"/)
     expect(layout).toContain('Blind Report')
 
     // Não deve carregar scripts de CDNs externos

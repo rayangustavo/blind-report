@@ -16,7 +16,7 @@ describe('WEBSITE - Contratos Estruturais da Página Principal (app/page.tsx)', 
     expect(pageSource).toMatch(/Corruption|Corrupção/)
     expect(pageSource).toMatch(/Public policy|Políticas públicas/)
     expect(pageSource).toMatch(/Human rights|Direitos humanos/)
-    expect(pageSource).toContain('Meio ambiente')
+    expect(pageSource).toMatch(/Environment|Meio ambiente/)
   })
 
   it('define os status das denuncias para a redacao', () => {
@@ -28,31 +28,31 @@ describe('WEBSITE - Contratos Estruturais da Página Principal (app/page.tsx)', 
 
   it('define as opcoes de redacao suportadas', () => {
     expect(pageSource).toMatch(/Public Ledger|Folha Pública/)
-    expect(pageSource).toContain('Jornal da Cidade')
-    expect(pageSource).toContain('Agência Horizonte')
+    expect(pageSource).toMatch(/City Journal|Jornal da Cidade/)
+    expect(pageSource).toMatch(/Horizon Wire|Agência Horizonte/)
   })
 
   it('garante padrao de identificador de denuncia anonima no formato BR-XXXX', () => {
     expect(pageSource).toMatch(/BR-/)
-    expect(pageSource).toContain('IDENTIFICADOR DA DENÚNCIA')
+    expect(pageSource).toMatch(/TIP IDENTIFIER|IDENTIFICADOR DA DENÚNCIA/)
   })
 
   it('define regras de limite de tamanho de mensagem (min 10 caracteres, max 2.000)', () => {
     expect(pageSource).toContain('message.length < 10')
-    expect(pageSource).toContain('2.000')
+    expect(pageSource).toMatch(/2[.,]000/)
   })
 
   it('inclui os 3 passos do fluxo de denuncia (01/03, 02/03, ENVIADO)', () => {
     expect(pageSource).toMatch(/NEW TIP|NOVA DENÚNCIA/)
-    expect(pageSource).toContain('SOBRE A DENÚNCIA')
-    expect(pageSource).toContain('DENÚNCIA RECEBIDA')
+    expect(pageSource).toMatch(/ABOUT THE TIP|SOBRE A DENÚNCIA/)
+    expect(pageSource).toMatch(/TIP RECEIVED|DENÚNCIA RECEBIDA/)
   })
 
   it('painel da redacao (desk) inclui metricas e controles editoriais', () => {
-    expect(pageSource).toContain('NÃO LIDAS')
-    expect(pageSource).toContain('EM INVESTIGAÇÃO')
-    expect(pageSource).toContain('TEMPO MÉDIO DE RESPOSTA')
-    expect(pageSource).toContain('Nota interna')
-    expect(pageSource).toContain('Status da denúncia')
+    expect(pageSource).toMatch(/UNREAD|NÃO LIDAS/)
+    expect(pageSource).toMatch(/INVESTIGATING|EM INVESTIGAÇÃO/)
+    expect(pageSource).toMatch(/AVG\. RESPONSE TIME|TEMPO MÉDIO DE RESPOSTA/)
+    expect(pageSource).toMatch(/Internal note|Nota interna/)
+    expect(pageSource).toMatch(/Tip status|Status da denúncia/)
   })
 })
