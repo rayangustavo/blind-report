@@ -579,42 +579,6 @@ export function ReportFlow({
               The more context you share, the better the newsroom can evaluate. Avoid including details that might identify you.
             </p>
 
-            {isDemo && (
-              <div className="p-3 bg-amber-950/40 border border-amber-600/50 rounded mb-4 text-left">
-                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
-                    <Zap size={14} /> Evaluator Fast-Track Controls
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="demo-load-btn text-xs py-1 px-2"
-                      onClick={() => onLoadScenario?.('procurement')}
-                    >
-                      ⚡ Load "$14.2M Procurement"
-                    </button>
-                    <button
-                      type="button"
-                      className="demo-load-btn text-xs py-1 px-2"
-                      onClick={() => onLoadScenario?.('environmental')}
-                    >
-                      ⚡ Load "Chemical Dumping"
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-xs text-gray-300">
-                  <span>World ID Action: <code>submit:{newsroom}:202611</code></span>
-                  <button
-                    type="button"
-                    className={`outline-button small-button text-xs py-1 ${zkpProofGenerated ? 'text-emerald-400 border-emerald-500' : ''}`}
-                    onClick={() => onFastTrackZkp?.()}
-                  >
-                    {zkpProofGenerated ? '✔ ZKP Ready' : '⚡ 1-Click ZKP (Bypass Orb)'}
-                  </button>
-                </div>
-              </div>
-            )}
-
             <label>Tip category</label>
             <div className="category-grid">
               {['Corruption', 'Public policy', 'Human rights', 'Environment'].map((item) => (
@@ -630,7 +594,31 @@ export function ReportFlow({
               ))}
             </div>
 
-            <label htmlFor="report-message">Describe the facts</label>
+            <div className="flex items-center justify-between" style={{ marginTop: '14px', marginBottom: '6px' }}>
+              <label htmlFor="report-message" style={{ margin: 0 }}>Describe the facts</label>
+              {isDemo && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Sample:</span>
+                  <button
+                    type="button"
+                    className="text-xs text-amber-400 hover:underline flex items-center gap-1"
+                    onClick={() => onLoadScenario?.('procurement', { navigateToStep2: false })}
+                    title="Fill sample procurement leak"
+                  >
+                    <Sparkles size={11} /> Corruption ($14.2M)
+                  </button>
+                  <span className="text-xs text-gray-600">·</span>
+                  <button
+                    type="button"
+                    className="text-xs text-amber-400 hover:underline"
+                    onClick={() => onLoadScenario?.('environmental', { navigateToStep2: false })}
+                    title="Fill sample environmental dumping leak"
+                  >
+                    Environment
+                  </button>
+                </div>
+              )}
+            </div>
             <textarea
               id="report-message"
               value={message}
