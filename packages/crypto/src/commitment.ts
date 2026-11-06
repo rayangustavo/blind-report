@@ -1,36 +1,16 @@
-import { toBase64Url } from "@blind-report/core";
-import { CryptoError } from "./errors";
-import { sha256Bytes } from "./hash";
+import type { Envelope } from "@blind-report/core";
+import { hashHex } from "./hash.ts";
 
-const COMMITMENT_DOMAIN = "blind-report:commitment:v1";
-const encoder = new TextEncoder();
-
-function commitmentBytes(plaintext: string, salt: string): Uint8Array {
-  // JSON garante separação não ambígua entre domínio, texto e sal.
-  return encoder.encode(JSON.stringify([COMMITMENT_DOMAIN, plaintext, salt]));
+/** Compromisso de autoria: hash(texto ‖ sal). Só quem tem o texto e o sal o reproduz. */
+export function commitmentOf(plaintext: Uint8Array, salt: Uint8Array): string {
+  return hashHex(plaintext, salt);
 }
 
-/**
- * Compromisso com sal sobre o conteúdo original. Permite comprovar autoria
- * depois sem guardar o texto em claro.
- */
-export function commitmentOf(plaintext: string, salt: string): string {
-  if (typeof plaintext !== "string") throw new CryptoError("plaintext must be a string");
-  if (typeof salt !== "string" || salt.length === 0) throw new CryptoError("salt must be a non-empty string");
-  return toBase64Url(sha256Bytes(commitmentBytes(plaintext, salt)));
+export function verifyCommitment(envelope: Envelope, plaintext: Uint8Array, salt: Uint8Array): boolean {
+  return commitmentOf(plaintext, salt) === envelope.commitment;
 }
 
-function equalConstantTime(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let index = 0; index < a.length; index += 1) {
-    diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
-  }
-  return diff === 0;
-}
-
-/** Confere se `expectedHash` corresponde ao compromisso do conteúdo e do sal. */
-export function verifyCommitment(plaintext: string, salt: string, expectedHash: string): boolean {
-  if (typeof expectedHash !== "string") throw new CryptoError("expectedHash must be a string");
-  return equalConstantTime(commitmentOf(plaintext, salt), expectedHash);
+/** O hash público do ciphertext confere com o envelope? */
+export function verifyContentHash(envelope: Envelope): boolean {
+  return hashHex(envelope.ciphertext) === envelope.contentHash;
 }

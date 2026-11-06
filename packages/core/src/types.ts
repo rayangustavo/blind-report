@@ -1,61 +1,35 @@
+/** Política de recebimento publicada pela redação em `denuncia.policy`. */
 export type NewsroomPolicy = {
-  version: number;
   categories: string[];
-  maxSizeBytes: number;
-  acceptsAttachments: boolean;
-  retentionDays?: number;
+  maxBytes: number;
+  attachments: boolean;
+  epoch: "monthly";
 };
 
-export type Attachment = {
-  name: string;
-  mimeType: string;
-  dataBase64Url: string;
-};
+export type Part = { index: number; total: number; data: Uint8Array };
 
-export type Payload = {
-  text: string;
-  category: string;
-  attachment?: Attachment;
-};
+/** Chave de conteúdo embrulhada para um destinatário. */
+export type WrappedKey = { recipient: string; sealed: Uint8Array };
 
+/** Envelope cifrado. O *ciphertext* é binário (sem base64). Hashes em hexadecimal com prefixo 0x. */
 export type Envelope = {
-  version: number;
+  v: 1;
   newsroom: string;
+  pubkeyVersion: number;
   category: string;
-  epoch: string;
-  recipientKeys: string[]; // Chaves efêmeras por destinatário
-  ephemeralPublicKey: string;
+  wrappedKeys: WrappedKey[];
+  nonce: Uint8Array;
   ciphertext: Uint8Array;
-  authTag: Uint8Array;
   contentHash: string;
+  commitment: string;
+  mailboxPub: Uint8Array;
+  clientTs: number;
 };
 
+/** Recibo: existe só no dispositivo da fonte. */
 export type Receipt = {
-  receiptId: string;
-  newsroom: string;
-  epoch: string;
-  entityKey: string;
-  mailboxPrivateKey: string;
-  salt: string;
-  createdAt: string;
-};
-
-export type Part = {
-  index: number;
-  total: number;
-  payload: Uint8Array;
-  checksum: string;
-};
-
-export type Reply = {
-  mailboxId: string;
-  text: string;
-  authorName?: string;
-  timestamp: number;
-};
-
-export type Annotation = {
-  status: "unread" | "in_review" | "investigating" | "archived";
-  notes?: string;
-  updatedAt: number;
+  contentHash: string;
+  salt: Uint8Array;
+  mailboxPriv: Uint8Array;
+  mailboxPub: Uint8Array;
 };

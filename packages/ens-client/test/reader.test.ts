@@ -1,150 +1,127 @@
-import { ENS_KEYS, serializePolicy, toBase64Url, type NewsroomPolicy } from "@blind-report/core";
-import { vi } from "vitest";
-import type { Address, PublicClient } from "viem";
-import { describe, expect, it } from "vitest";
-import { nodeForName } from "../src/dns";
-import { EnsResolutionError } from "../src/errors";
-import { createReader } from "../src/reader";
+import { ENS_KEYS, toBase64Url } from "@blind-report/core";
+import { describe, expect, it, vi } from "vitest";
+import { InvalidNameError, NewsroomNotFoundError, RecordsError, createReader, type EnsReadClient } from "../src/index.ts";
 
-const registryAddress = "0x2222222222222222222222222222222222222222" as Address;
-const resolverAddress = "0x3333333333333333333333333333333333333333" as Address;
-const custodian = "0x1111111111111111111111111111111111111111" as Address;
-const publicKey = toBase64Url(new Uint8Array(32).fill(7));
-const policy: NewsroomPolicy = {
-  version: 1,
-  categories: ["corrupcao"],
-  maxSizeBytes: 1_024,
-  acceptsAttachments: true,
-};
+const UR = "0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe";
+const KEY = new Uint8Array(32).fill(9);
+const ZERO = "0x0000000000000000000000000000000000000000";
+const CUSTODIAN = "0xdC35Ef1b21dfE85F595132829E4C2bfcBB5c037e";
+const SUBREGISTRY = "0x1111111111111111111111111111111111111111";
 
-type ReadCall = { functionName: string; args: readonly unknown[] };
-
-function mockClient(overrides: {
-  resolver?: unknown;
-  owner?: unknown;
-  texts?: Record<string, string>;
-  rejectWith?: Error;
-} = {}) {
-  const calls: ReadCall[] = [];
-  const readContract = vi.fn(async (call: ReadCall) => {
-    calls.push({ functionName: call.functionName, args: call.args });
-    if (overrides.rejectWith !== undefined) throw overrides.rejectWith;
-    if (call.functionName === "resolver") return "resolver" in overrides ? overrides.resolver : resolverAddress;
-    if (call.functionName === "owner") return "owner" in overrides ? overrides.owner : custodian;
-    if (call.functionName === "text") return overrides.texts?.[String(call.args[1])] ?? "";
-    throw new Error(`unexpected call: ${call.functionName}`);
-  });
-  return { client: { readContract } as unknown as PublicClient, calls };
+function fakeClient(texts: Record<string, string | null>, opts: { address?: string | null; subregistry?: string; owner?: string; available?: boolean } = {}) {
+  const calls: { fn: string; args: unknown }[] = [];
+  const client: EnsReadClient = {
+    getEnsText: vi.fn(async (a) => {
+      calls.push({ fn: "getEnsText", args: a });
+      return texts[`${a.name}|${a.key}`] ?? null;
+    }),
+    getEnsAddress: vi.fn(async (a) => {
+      calls.push({ fn: "getEnsAddress", args: a });
+      return (opts.address === undefined ? CUSTODIAN : opts.address) as `0x${string}` | null;
+    }),
+    readContract: vi.fn(async (a) => {
+      calls.push({ fn: `readContract:${a.functionName}`, args: a });
+      if (a.functionName === "getSubregistry") return opts.subregistry ?? SUBREGISTRY;
+      if (a.functionName === "findOwner") return opts.owner ?? CUSTODIAN;
+      if (a.functionName === "isAvailable") return opts.available ?? true;
+      throw new Error("chamada inesperada");
+    }),
+  };
+  return { client, calls };
 }
 
-const validTexts = {
-  [ENS_KEYS.KEY]: publicKey,
-  [ENS_KEYS.VERSION]: "3",
-  [ENS_KEYS.POLICY]: serializePolicy(policy),
-  [ENS_KEYS.READER_KEY]: toBase64Url(new Uint8Array(32).fill(9)),
-};
+const newsroomTexts = (name = "investiga.jornal.eth") => ({
+  [`${name}|${ENS_KEYS.pubkey}`]: toBase64Url(KEY),
+  [`${name}|${ENS_KEYS.pubkeyVersion}`]: "2",
+  [`${name}|${ENS_KEYS.policy}`]: JSON.stringify({ categories: ["a"] }),
+  [`${name}|${ENS_KEYS.relayer}`]: "https://r.example.org",
+});
 
-describe("createReader", () => {
-  it("validates its dependencies", () => {
-    expect(() => createReader(null as unknown as never)).toThrow(EnsResolutionError);
-    expect(() => createReader({} as never)).toThrow(/viemClient/);
-    expect(() => createReader({ viemClient: {} as never, registryAddress })).toThrow(/viemClient/);
-    expect(() => createReader({ viemClient: mockClient().client, registryAddress: "nope" as Address })).toThrow(
-      /registryAddress/,
-    );
+describe("RF-06 resolver a redação pelo nome", () => {
+  it("devolve_chave_versao_politica_e_custodiante", async () => {
+    const { client } = fakeClient(newsroomTexts());
+    const info = await createReader({ client, universalResolver: UR }).resolveNewsroom("investiga.jornal.eth");
+    expect(info.pubkeyVersion).toBe(2);
+    expect(info.publicKey).toEqual(KEY);
+    expect(info.custodian).toBe(CUSTODIAN);
+    expect(info.policy.categories).toEqual(["a"]);
   });
 
-  it("resolves a newsroom from ENS records", async () => {
-    const { client, calls } = mockClient({ texts: validTexts });
-    const reader = createReader({ viemClient: client, registryAddress });
-
-    await expect(reader.resolveNewsroom("redacao.eth")).resolves.toEqual({
-      name: "redacao.eth",
-      publicKey,
-      version: 3,
-      policy,
-      custodianAddress: custodian,
-    });
-
-    const resolverCall = calls.find((call) => call.functionName === "resolver");
-    expect(resolverCall?.args).toEqual([nodeForName("redacao.eth")]);
-    const textCalls = calls.filter((call) => call.functionName === "text");
-    expect(textCalls.map((call) => call.args[1])).toEqual(
-      expect.arrayContaining([ENS_KEYS.KEY, ENS_KEYS.VERSION, ENS_KEYS.POLICY]),
-    );
-    expect(calls.filter((call) => call.functionName === "owner")).toHaveLength(1);
+  it("so_le_pelo_nome_usando_a_universal_resolver_informada", async () => {
+    const { client, calls } = fakeClient(newsroomTexts());
+    await createReader({ client, universalResolver: UR }).resolveNewsroom("investiga.jornal.eth");
+    const ens = calls.filter((c) => c.fn === "getEnsText" || c.fn === "getEnsAddress");
+    expect(ens.length).toBe(5); // 4 textos + 1 endereço
+    for (const c of ens) expect((c.args as { universalResolverAddress: string }).universalResolverAddress).toBe(UR);
   });
 
-  it("resolves journalist reader keys from subnames", async () => {
-    const { client, calls } = mockClient({ texts: validTexts });
-    const reader = createReader({ viemClient: client, registryAddress });
-
-    await expect(reader.resolveReaderKey("marina.redacao.eth")).resolves.toBe(validTexts[ENS_KEYS.READER_KEY]);
-    expect(calls[0]).toEqual({ functionName: "resolver", args: [nodeForName("marina.redacao.eth")] });
-    expect(calls[1]).toEqual({
-      functionName: "text",
-      args: [nodeForName("marina.redacao.eth"), ENS_KEYS.READER_KEY],
-    });
+  it("recusa_nome_invalido_sem_consultar_a_rede", async () => {
+    const { client } = fakeClient({});
+    const reader = createReader({ client, universalResolver: UR });
+    await expect(reader.resolveNewsroom("Investiga.eth")).rejects.toBeInstanceOf(InvalidNameError);
+    expect(client.getEnsText).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid names before touching the chain", async () => {
-    const { client, calls } = mockClient({ texts: validTexts });
-    const reader = createReader({ viemClient: client, registryAddress });
-
-    await expect(reader.resolveNewsroom("redacao.com")).rejects.toThrow(/invalid newsroom name/);
-    await expect(reader.resolveReaderKey("")).rejects.toThrow(/invalid newsroom name/);
-    expect(calls).toHaveLength(0);
+  it("nome_sem_nenhum_registro_gera_nao_encontrada", async () => {
+    const { client } = fakeClient({}, { address: null });
+    await expect(createReader({ client, universalResolver: UR }).resolveNewsroom("vazio.eth")).rejects.toBeInstanceOf(NewsroomNotFoundError);
   });
 
-  it("rejects names without a resolver", async () => {
-    for (const resolver of [
-      "0x0000000000000000000000000000000000000000",
-      "not-an-address",
-      null,
-    ]) {
-      const { client } = mockClient({ resolver, texts: validTexts });
-      const reader = createReader({ viemClient: client, registryAddress });
-      await expect(reader.resolveNewsroom("redacao.eth")).rejects.toThrow(/no resolver/);
+  it("registros_incompletos_geram_erro_de_registros", async () => {
+    const { client } = fakeClient({ [`parcial.eth|${ENS_KEYS.pubkey}`]: toBase64Url(KEY) });
+    await expect(createReader({ client, universalResolver: UR }).resolveNewsroom("parcial.eth")).rejects.toBeInstanceOf(RecordsError);
+  });
+});
+
+describe("chave de leitura do jornalista", () => {
+  it("devolve_a_chave_de_32_bytes", async () => {
+    const { client } = fakeClient({ [`maria.investiga.jornal.eth|${ENS_KEYS.readerKey}`]: toBase64Url(KEY) });
+    expect(await createReader({ client, universalResolver: UR }).resolveReaderKey("maria.investiga.jornal.eth")).toEqual(KEY);
+  });
+
+  it("ausente_ou_invalida_gera_erro", async () => {
+    const reader = (t: Record<string, string | null>) => createReader({ client: fakeClient(t).client, universalResolver: UR });
+    await expect(reader({}).resolveReaderKey("maria.investiga.jornal.eth")).rejects.toBeInstanceOf(RecordsError);
+    await expect(reader({ [`maria.investiga.jornal.eth|${ENS_KEYS.readerKey}`]: "curta" }).resolveReaderKey("maria.investiga.jornal.eth")).rejects.toBeInstanceOf(RecordsError);
+  });
+});
+
+describe("V-04 jornalista ativo é decidido pelo registry, não pelo texto", () => {
+  it("ativo_quando_o_subname_tem_dono", async () => {
+    const { client, calls } = fakeClient({}, { owner: CUSTODIAN });
+    expect(await createReader({ client, universalResolver: UR }).isActiveJournalist("maria.investiga.eth")).toBe(true);
+    expect(calls.map((c) => c.fn)).toEqual(["readContract:getSubregistry", "readContract:findOwner"]);
+  });
+
+  it("inativo_quando_o_dono_e_o_endereco_zero_mesmo_com_a_chave_ainda_legivel", async () => {
+    const { client } = fakeClient({ [`maria.investiga.eth|${ENS_KEYS.readerKey}`]: toBase64Url(KEY) }, { owner: ZERO });
+    expect(await createReader({ client, universalResolver: UR }).isActiveJournalist("maria.investiga.eth")).toBe(false);
+  });
+
+  it("inativo_quando_a_redacao_nao_tem_registry_de_jornalistas", async () => {
+    const { client, calls } = fakeClient({}, { subregistry: ZERO });
+    expect(await createReader({ client, universalResolver: UR }).isActiveJournalist("maria.investiga.eth")).toBe(false);
+    expect(calls.some((c) => c.fn === "readContract:findOwner")).toBe(false);
+  });
+
+  it("so_aceita_o_formato_jornalista_redacao_eth", async () => {
+    const reader = createReader({ client: fakeClient({}).client, universalResolver: UR });
+    for (const bad of ["investiga.eth", "a.b.c.eth", "Maria.investiga.eth", "maria.investiga.com"]) {
+      await expect(reader.isActiveJournalist(bad), bad).rejects.toBeInstanceOf(InvalidNameError);
     }
   });
+});
 
-  it("rejects names without a custodian", async () => {
-    for (const owner of [
-      "0x0000000000000000000000000000000000000000",
-      undefined,
-      42,
-    ]) {
-      const { client } = mockClient({ owner, texts: validTexts });
-      const reader = createReader({ viemClient: client, registryAddress });
-      await expect(reader.resolveNewsroom("redacao.eth")).rejects.toThrow(/custodian/);
-    }
+describe("isNameAvailable (o nome .eth está livre para registrar?)", () => {
+  it("consulta_o_registrar_com_o_rotulo", async () => {
+    const { client, calls } = fakeClient({}, { available: false });
+    expect(await createReader({ client }).isNameAvailable("jornalista1.eth")).toBe(false);
+    expect(calls.find((c) => c.fn === "readContract:isAvailable")?.args).toMatchObject({ args: ["jornalista1"] });
+    expect(await createReader({ client: fakeClient({}, { available: true }).client }).isNameAvailable("livre.eth")).toBe(true);
   });
 
-  it("rejects incomplete or invalid records", async () => {
-    const cases: Record<string, string>[] = [
-      { ...validTexts, [ENS_KEYS.KEY]: "" },
-      { ...validTexts, [ENS_KEYS.VERSION]: "zero" },
-      { ...validTexts, [ENS_KEYS.POLICY]: "{}" },
-    ];
-    for (const texts of cases) {
-      const { client } = mockClient({ texts });
-      const reader = createReader({ viemClient: client, registryAddress });
-      await expect(reader.resolveNewsroom("redacao.eth")).rejects.toBeInstanceOf(EnsResolutionError);
-    }
-  });
-
-  it("rejects invalid reader keys", async () => {
-    for (const key of ["", "***", toBase64Url(new Uint8Array(31))]) {
-      const { client } = mockClient({ texts: { ...validTexts, [ENS_KEYS.READER_KEY]: key } });
-      const reader = createReader({ viemClient: client, registryAddress });
-      await expect(reader.resolveReaderKey("marina.redacao.eth")).rejects.toBeInstanceOf(EnsResolutionError);
-    }
-  });
-
-  it("propagates RPC failures", async () => {
-    const failure = new Error("rpc unavailable");
-    const { client } = mockClient({ rejectWith: failure });
-    const reader = createReader({ viemClient: client, registryAddress });
-    await expect(reader.resolveNewsroom("redacao.eth")).rejects.toBe(failure);
+  it("recusa_nome_que_nao_e_de_segundo_nivel_em_minusculas", async () => {
+    const r = createReader({ client: fakeClient({}).client });
+    for (const n of ["a.b.eth", "Maiuscula.eth", "sem-tld"]) await expect(r.isNameAvailable(n), n).rejects.toBeInstanceOf(InvalidNameError);
   });
 });

@@ -2,10 +2,20 @@
   "name": "@blind-report/relayer",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": {
-    ".": "./src/index.ts"
-  }
+  "main": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "start": "tsx src/main.ts" },
+  "dependencies": {
+    "@arkiv-network/sdk": "^1.0.0",
+    "@blind-report/arkiv-store": "*",
+    "@blind-report/core": "*",
+    "@blind-report/crypto": "*",
+    "@blind-report/ens-client": "*",
+    "@blind-report/network-policy": "*",
+    "@blind-report/worldid-gate": "*",
+    "viem": "^2.38.0"
+  },
+  "devDependencies": { "tsx": "^4.20.0" }
 }

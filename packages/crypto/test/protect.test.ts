@@ -1,106 +1,66 @@
-import { fromBase64Url, toBase64Url } from "@blind-report/core";
 import { describe, expect, it } from "vitest";
-import { CryptoError } from "../src/errors";
-import { protectKeyring, unlockKeyring, type ProtectedKeyring } from "../src/protect";
+import { CryptoError, lockWithPassword, newKeypair, openSealed, sealTo, unlockWithPassword } from "../src/index.ts";
 
-const iterations = 1_000;
-const password = "senha-muito-forte";
-const keyring = '{"version":1,"seed":"c2VlZA=="}';
+const FAST = { iterations: 1000 };
+const data = new TextEncoder().encode("chave-privada-de-teste");
 
-function mutate(json: string, patch: Record<string, unknown>): string {
-  return JSON.stringify({ ...JSON.parse(json), ...patch });
-}
-
-describe("protectKeyring", () => {
-  it("produces a PBKDF2 + secretbox envelope that unlocks back", async () => {
-    const protectedJson = await protectKeyring(keyring, password, { iterations });
-    const parsed = JSON.parse(protectedJson) as ProtectedKeyring;
-
-    expect(parsed).toMatchObject({ version: 1, kdf: "pbkdf2-sha256", iterations });
-    expect(fromBase64Url(parsed.salt)).toHaveLength(16);
-    expect(fromBase64Url(parsed.nonce)).toHaveLength(24);
-    expect(fromBase64Url(parsed.ciphertext).length).toBeGreaterThanOrEqual(16);
-
-    const unlocked = await unlockKeyring(protectedJson, password);
-    expect(new TextDecoder().decode(unlocked)).toBe(keyring);
+describe("proteção por senha", () => {
+  it("ida_e_volta_com_a_senha_certa", async () => {
+    const blob = await lockWithPassword(data, "correct horse", FAST);
+    expect([...(await unlockWithPassword(blob, "correct horse"))]).toEqual([...data]);
   });
 
-  it("protects raw bytes and accepts a parsed object on unlock", async () => {
-    const bytes = new Uint8Array([0, 1, 2, 3, 255]);
-    const protectedJson = await protectKeyring(bytes, password, { iterations });
-    expect(await unlockKeyring(JSON.parse(protectedJson) as ProtectedKeyring, password)).toEqual(bytes);
+  it("senha_errada_falha_com_erro_claro", async () => {
+    const blob = await lockWithPassword(data, "correct horse", FAST);
+    await expect(unlockWithPassword(blob, "outra senha")).rejects.toMatchObject({ code: "decrypt" });
   });
 
-  it("uses a fresh salt and nonce per call", async () => {
-    const first = JSON.parse(await protectKeyring(keyring, password, { iterations })) as ProtectedKeyring;
-    const second = JSON.parse(await protectKeyring(keyring, password, { iterations })) as ProtectedKeyring;
-    expect(first.salt).not.toBe(second.salt);
-    expect(first.nonce).not.toBe(second.nonce);
-    expect(first.ciphertext).not.toBe(second.ciphertext);
+  it("o_bloco_nao_contem_o_conteudo_nem_a_senha", async () => {
+    const blob = await lockWithPassword(data, "senha-secreta-123", FAST);
+    expect(blob).not.toContain("chave-privada");
+    expect(blob).not.toContain("senha-secreta-123");
+    expect(Buffer.from(blob, "base64url").toString("latin1")).not.toContain("chave-privada-de-teste");
   });
 
-  it("defaults to 310k iterations", async () => {
-    const parsed = JSON.parse(await protectKeyring(keyring, password)) as ProtectedKeyring;
-    expect(parsed.iterations).toBe(310_000);
+  it("dois_blocos_do_mesmo_conteudo_sao_diferentes_sal_e_nonce_novos", async () => {
+    expect(await lockWithPassword(data, "x1234567", FAST)).not.toBe(await lockWithPassword(data, "x1234567", FAST));
   });
 
-  it("validates inputs", async () => {
-    await expect(protectKeyring(42 as unknown as string, password)).rejects.toBeInstanceOf(CryptoError);
-    await expect(protectKeyring(keyring, "")).rejects.toThrow(/password/);
-    await expect(protectKeyring(keyring, 3 as unknown as string)).rejects.toThrow(/password/);
-    await expect(protectKeyring(keyring, password, { iterations: 0 })).rejects.toThrow(/iterations/);
-    await expect(protectKeyring(keyring, password, { iterations: 1.5 })).rejects.toThrow(/iterations/);
-    await expect(protectKeyring(keyring, password, { iterations: 999 })).rejects.toThrow(/iterations/);
+  it("bloco_adulterado_ou_malformado_e_recusado", async () => {
+    const blob = await lockWithPassword(data, "pw-12345", FAST);
+    const raw = JSON.parse(Buffer.from(blob, "base64url").toString());
+    raw.ct = raw.ct.slice(0, -4) + "AAAA";
+    const bad = Buffer.from(JSON.stringify(raw)).toString("base64url");
+    await expect(unlockWithPassword(bad, "pw-12345")).rejects.toBeInstanceOf(CryptoError);
+    await expect(unlockWithPassword("lixo", "pw-12345")).rejects.toMatchObject({ code: "format" });
+    await expect(unlockWithPassword(Buffer.from('{"v":9}').toString("base64url"), "pw-12345")).rejects.toMatchObject({ code: "format" });
+  });
+
+  it("recusa_senha_curta_e_iteracoes_baixas_demais_em_producao", async () => {
+    await expect(lockWithPassword(data, "curta", FAST)).rejects.toMatchObject({ code: "input" });
+    await expect(lockWithPassword(data, "senha-longa-ok")).resolves.toBeTypeOf("string"); // padrão forte (600 mil iterações)
+  }, 20_000);
+
+  it("o_numero_de_iteracoes_vai_no_bloco_e_ao_abrir_valores_absurdos_sao_recusados", async () => {
+    const blob = await lockWithPassword(data, "pw-12345", FAST);
+    const raw = JSON.parse(Buffer.from(blob, "base64url").toString());
+    expect(raw.iter).toBe(1000);
+    raw.iter = 1e12;
+    await expect(unlockWithPassword(Buffer.from(JSON.stringify(raw)).toString("base64url"), "pw-12345")).rejects.toMatchObject({ code: "format" });
   });
 });
 
-describe("unlockKeyring", () => {
-  it("rejects a wrong password", async () => {
-    const protectedJson = await protectKeyring(keyring, password, { iterations });
-    await expect(unlockKeyring(protectedJson, "outra-senha")).rejects.toThrow(/wrong password/);
+describe("caixa selada genérica", () => {
+  it("so_o_dono_da_chave_privada_abre", () => {
+    const a = newKeypair();
+    const b = newKeypair();
+    const sealed = sealTo(a.publicKey, data);
+    expect([...openSealed(sealed, a)]).toEqual([...data]);
+    expect(() => openSealed(sealed, b)).toThrow(CryptoError);
   });
 
-  it("rejects tampered ciphertext, salt and nonce", async () => {
-    const protectedJson = await protectKeyring(keyring, password, { iterations });
-    const parsed = JSON.parse(protectedJson) as ProtectedKeyring;
-
-    const ciphertext = fromBase64Url(parsed.ciphertext);
-    ciphertext[ciphertext.length - 1]! ^= 0x01;
-    await expect(unlockKeyring(mutate(protectedJson, { ciphertext: toBase64Url(ciphertext) }), password)).rejects.toThrow(
-      /wrong password/,
-    );
-    await expect(
-      unlockKeyring(mutate(protectedJson, { salt: toBase64Url(new Uint8Array(16).fill(1)) }), password),
-    ).rejects.toThrow(/wrong password/);
-    await expect(
-      unlockKeyring(mutate(protectedJson, { nonce: toBase64Url(new Uint8Array(24).fill(1)) }), password),
-    ).rejects.toThrow(/wrong password/);
-  });
-
-  it("rejects malformed protected keyrings", async () => {
-    const protectedJson = await protectKeyring(keyring, password, { iterations });
-    const invalid: Array<string | ProtectedKeyring> = [
-      "{not json",
-      "null",
-      "[]",
-      mutate(protectedJson, { version: 2 }),
-      mutate(protectedJson, { kdf: "scrypt" }),
-      mutate(protectedJson, { iterations: "1000" }),
-      mutate(protectedJson, { iterations: 999 }),
-      mutate(protectedJson, { salt: "***" }),
-      mutate(protectedJson, { salt: toBase64Url(new Uint8Array(15)) }),
-      mutate(protectedJson, { nonce: toBase64Url(new Uint8Array(23)) }),
-      mutate(protectedJson, { ciphertext: "***" }),
-      mutate(protectedJson, { ciphertext: toBase64Url(new Uint8Array(15)) }),
-    ];
-    for (const value of invalid) {
-      await expect(unlockKeyring(value, password)).rejects.toBeInstanceOf(CryptoError);
-    }
-  });
-
-  it("validates the password", async () => {
-    const protectedJson = await protectKeyring(keyring, password, { iterations });
-    await expect(unlockKeyring(protectedJson, "")).rejects.toThrow(/password/);
-    await expect(unlockKeyring(protectedJson, 42 as unknown as string)).rejects.toThrow(/password/);
+  it("recusa_chave_invalida_e_dado_vazio", () => {
+    expect(() => sealTo(new Uint8Array(3), data)).toThrow(CryptoError);
+    expect(() => sealTo(newKeypair().publicKey, new Uint8Array())).toThrow(CryptoError);
   });
 });

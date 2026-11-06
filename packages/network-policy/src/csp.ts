@@ -1,23 +1,18 @@
-import { isLoopbackHost } from "./policy";
-import type { NetworkPolicy } from "./types";
+import type { NetworkPolicy } from "./policy.ts";
 
-/**
- * Gera o header `Content-Security-Policy` com `connect-src` estrito:
- * somente o próprio site e os hosts da allowlist.
- */
+/** Gera a política de segurança de conteúdo a partir dos hosts declarados. Sem curingas e sem scripts inline. */
 export function cspFor(policy: NetworkPolicy): string {
-  const sources = new Set<string>();
-  for (const host of policy.hosts) {
-    const hostname = host.toLowerCase();
-    if (isLoopbackHost(hostname)) sources.add(`http://${hostname}:*`);
-    sources.add(`https://${hostname}:*`);
-  }
-  const connectSrc = ["'self'", ...[...sources].sort()].join(" ");
+  const connect = ["'self'", ...policy.hosts.map((h) => `https://${h}`)];
+  if (policy.allowLocalhost) connect.push("http://localhost:*", "http://127.0.0.1:*");
   return [
     "default-src 'self'",
-    `connect-src ${connectSrc}`,
-    "base-uri 'none'",
-    "form-action 'none'",
+    "script-src 'self' 'wasm-unsafe-eval'", // o libsodium usa WebAssembly
+    "style-src 'self'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    `connect-src ${connect.join(" ")}`,
     "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
   ].join("; ");
 }

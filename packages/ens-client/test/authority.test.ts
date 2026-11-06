@@ -1,54 +1,103 @@
-import { zeroAddress, type Address, type PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { isActiveJournalist } from "../src/authority";
-import { nodeForName } from "../src/dns";
-import { EnsAdminError } from "../src/errors";
+import { InvalidNameError, createAuthority, createReader, type EnsReadClient } from "../src/index.ts";
 
-const registryAddress = "0x2222222222222222222222222222222222222222" as Address;
-const custodian = "0x1111111111111111111111111111111111111111" as Address;
+const NEWSROOM = "investiga.eth";
+const ADMIN = "0xdC35Ef1b21dfE85F595132829E4C2bfcBB5c037e";
+const MARIA = "0xa63A63047e362EE0B8af09489DCA1dc172E507ca";
+const STRANGER = "0x9999999999999999999999999999999999999999";
+const ZERO = "0x0000000000000000000000000000000000000000";
 
-function clientReturning(owner: unknown) {
-  const readContract = vi.fn(async () => owner);
-  return { client: { readContract } as unknown as PublicClient, readContract };
+function stubReader(owners: Record<string, string | null>, custodian = ADMIN) {
+  return {
+    resolveNewsroom: vi.fn(async (name: string) => ({ name, custodian }) as never),
+    journalistOwner: vi.fn(async (name: string) => (owners[name] ?? null) as `0x${string}` | null),
+  };
 }
 
-describe("isActiveJournalist", () => {
-  it("validates its dependencies", async () => {
-    await expect(isActiveJournalist(null as unknown as never, "marina.redacao.eth")).rejects.toThrow(EnsAdminError);
-    await expect(
-      isActiveJournalist({ publicClient: {} as never, registryAddress }, "marina.redacao.eth"),
-    ).rejects.toThrow(/publicClient/);
-    await expect(
-      isActiveJournalist({ publicClient: clientReturning(custodian).client, registryAddress: "nope" as Address }, "marina.redacao.eth"),
-    ).rejects.toThrow(/registryAddress/);
+describe("journalistOwner (leitor)", () => {
+  const client = (owner: string, subregistry = "0x1111111111111111111111111111111111111111"): EnsReadClient => ({
+    getEnsText: vi.fn(async () => null),
+    getEnsAddress: vi.fn(async () => ADMIN as never),
+    readContract: vi.fn(async (a) => (a.functionName === "getSubregistry" ? subregistry : owner)),
   });
 
-  it("rejects invalid subnames before reading the registry", async () => {
-    const { client, readContract } = clientReturning(custodian);
-    await expect(
-      isActiveJournalist({ publicClient: client, registryAddress }, "marina.com"),
-    ).rejects.toThrow(/invalid newsroom name/);
-    expect(readContract).not.toHaveBeenCalled();
+  it("devolve_o_dono_do_subnome_ativo", async () => {
+    expect(await createReader({ client: client(MARIA) }).journalistOwner(`maria.${NEWSROOM}`)).toBe(MARIA);
   });
 
-  it("returns true when the node has a non-zero owner", async () => {
-    const { client, readContract } = clientReturning(custodian);
-    await expect(isActiveJournalist({ publicClient: client, registryAddress }, "marina.redacao.eth")).resolves.toBe(true);
-    expect(readContract).toHaveBeenCalledWith(
-      expect.objectContaining({
-        address: registryAddress,
-        functionName: "owner",
-        args: [nodeForName("marina.redacao.eth")],
-      }),
-    );
+  it("devolve_nulo_se_nao_ha_dono_ou_registry", async () => {
+    expect(await createReader({ client: client(ZERO) }).journalistOwner(`maria.${NEWSROOM}`)).toBeNull();
+    expect(await createReader({ client: client(MARIA, ZERO) }).journalistOwner(`maria.${NEWSROOM}`)).toBeNull();
   });
 
-  it("returns false when the node has no active owner", async () => {
-    for (const owner of [zeroAddress, "not-an-address", null, 42]) {
-      const { client } = clientReturning(owner);
-      await expect(
-        isActiveJournalist({ publicClient: client, registryAddress }, "marina.redacao.eth"),
-      ).resolves.toBe(false);
+  it("recusa_nome_que_nao_e_de_jornalista", async () => {
+    await expect(createReader({ client: client(MARIA) }).journalistOwner("investiga.eth")).rejects.toBeInstanceOf(InvalidNameError);
+  });
+
+  it("isActiveJournalist_continua_valendo", async () => {
+    expect(await createReader({ client: client(MARIA) }).isActiveJournalist(`maria.${NEWSROOM}`)).toBe(true);
+    expect(await createReader({ client: client(ZERO) }).isActiveJournalist(`maria.${NEWSROOM}`)).toBe(false);
+  });
+});
+
+describe("autoridade da redação (A2)", () => {
+  const make = (owners: Record<string, string | null> = { [`maria.${NEWSROOM}`]: MARIA }, custodian = ADMIN) => {
+    const reader = stubReader(owners, custodian);
+    return { reader, authority: createAuthority({ reader, newsroom: NEWSROOM }) };
+  };
+
+  it("administrador_vale_sem_nome", async () => {
+    expect(await make().authority.isAuthorized({ creator: ADMIN as never })).toBe(true);
+  });
+
+  it("administrador_vale_mesmo_com_o_endereco_em_outra_caixa", async () => {
+    expect(await make().authority.isAuthorized({ creator: ADMIN.toLowerCase() as never, authorName: "qualquer.investiga.eth" })).toBe(true);
+  });
+
+  it("jornalista_ativo_com_dono_correto_vale", async () => {
+    expect(await make().authority.isAuthorized({ creator: MARIA as never, authorName: `maria.${NEWSROOM}` })).toBe(true);
+  });
+
+  it("nome_de_jornalista_com_dono_diferente_do_criador_nao_vale", async () => {
+    expect(await make().authority.isAuthorized({ creator: STRANGER as never, authorName: `maria.${NEWSROOM}` })).toBe(false);
+  });
+
+  it("subnome_de_outra_redacao_nao_vale", async () => {
+    const { authority, reader } = make({ "maria.outra.eth": STRANGER });
+    expect(await authority.isAuthorized({ creator: STRANGER as never, authorName: "maria.outra.eth" })).toBe(false);
+    expect(reader.journalistOwner).not.toHaveBeenCalled();
+  });
+
+  it("jornalista_revogado_nao_vale", async () => {
+    expect(await make({ [`maria.${NEWSROOM}`]: null }).authority.isAuthorized({ creator: MARIA as never, authorName: `maria.${NEWSROOM}` })).toBe(false);
+  });
+
+  it("sem_nome_e_criador_diferente_do_custodiante_nao_vale", async () => {
+    expect(await make().authority.isAuthorized({ creator: MARIA as never })).toBe(false);
+  });
+
+  it("nome_malformado_ou_com_niveis_extras_nao_vale", async () => {
+    const { authority } = make();
+    for (const authorName of ["maria", "a.b.investiga.eth", `.${NEWSROOM}`, `Maria.${NEWSROOM}`]) {
+      expect(await authority.isAuthorized({ creator: MARIA as never, authorName }), authorName).toBe(false);
     }
+  });
+
+  it("consulta_o_ens_uma_vez_por_nome_e_o_custodiante_uma_vez", async () => {
+    const { authority, reader } = make();
+    for (let i = 0; i < 3; i++) await authority.isAuthorized({ creator: MARIA as never, authorName: `maria.${NEWSROOM}` });
+    await authority.isAuthorized({ creator: ADMIN as never });
+    expect(reader.journalistOwner).toHaveBeenCalledTimes(1);
+    expect(reader.resolveNewsroom).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha_de_rede_nao_vira_autorizado", async () => {
+    const reader = stubReader({});
+    reader.journalistOwner.mockRejectedValueOnce(new Error("rpc fora"));
+    await expect(createAuthority({ reader, newsroom: NEWSROOM }).isAuthorized({ creator: MARIA as never, authorName: `maria.${NEWSROOM}` })).rejects.toThrow();
+  });
+
+  it("recusa_nome_de_redacao_invalido", () => {
+    expect(() => createAuthority({ reader: stubReader({}), newsroom: "Invalida" })).toThrow(InvalidNameError);
   });
 });

@@ -1,31 +1,17 @@
-/** Épocas de submissão: período UTC mensal no formato `YYYY-MM` (ex.: `2026-11`). */
-
-const EPOCH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-
-export type EpochPeriod = "monthly";
-
-/**
- * Época à qual uma data pertence. Datas são interpretadas em UTC, então o
- * resultado não depende do fuso horário da máquina.
- */
-export function epochOf(date: Date = new Date(), period: EpochPeriod = "monthly"): string {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-    throw new TypeError("epochOf expects a valid Date");
-  }
-  if (period !== "monthly") {
-    throw new TypeError(`unsupported epoch period: ${String(period)}`);
-  }
-  const year = date.getUTCFullYear().toString().padStart(4, "0");
-  const month = (date.getUTCMonth() + 1).toString().padStart(2, "0");
-  return `${year}-${month}`;
+/** Época mensal em UTC no formato AAAAMM (ex.: 202611). */
+export function epochOf(date: Date): number {
+  if (Number.isNaN(date.getTime())) throw new RangeError("Data inválida.");
+  return date.getUTCFullYear() * 100 + (date.getUTCMonth() + 1);
 }
 
-/** Valida o formato `YYYY-MM` com mês entre 01 e 12. */
-export function isEpoch(str: string): boolean {
-  return typeof str === "string" && EPOCH_RE.test(str);
+/** Época corrente, com o relógio injetado. */
+export function currentEpoch(now: () => Date): number {
+  return epochOf(now());
 }
 
-/** Época corrente em UTC. */
-export function currentEpoch(): string {
-  return epochOf(new Date());
+export function isEpoch(value: unknown): value is number {
+  if (typeof value !== "number" || !Number.isInteger(value)) return false;
+  const month = value % 100;
+  const year = Math.floor(value / 100);
+  return year >= 1000 && year <= 9999 && month >= 1 && month <= 12;
 }

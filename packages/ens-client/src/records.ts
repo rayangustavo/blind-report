@@ -1,52 +1,71 @@
-import { fromBase64Url, isNewsroomName, parsePolicy } from "@blind-report/core";
-import { isAddress, zeroAddress, type Address } from "viem";
-import { EnsResolutionError } from "./errors";
-import type { NewsroomInfo } from "./types";
+import { fromBase64Url, parsePolicy, PolicyError, type NewsroomPolicy } from "@blind-report/core";
+import { isAddress, type Address } from "viem";
+import { RecordsError } from "./errors.ts";
 
-export type NewsroomRecords = {
-  key?: string;
-  version?: string;
-  policy?: string;
-  custodianAddress?: string;
+export type RawNewsroomRecords = {
+  name: string;
+  pubkey: string | null;
+  version: string | null;
+  policy: string | null;
+  relayer: string | null;
+  custodian: string | null;
 };
 
-/** Valida uma chave pública X25519 publicada em registro textual (base64url, 32 bytes). */
-export function parsePublicKeyRecord(value: string | undefined, field: string): string {
-  if (typeof value !== "string" || value.length === 0) throw new EnsResolutionError(`${field} is missing`);
+export type NewsroomInfo = {
+  name: string;
+  publicKey: Uint8Array;
+  pubkeyVersion: number;
+  policy: NewsroomPolicy;
+  relayers: string[];
+  custodian: Address;
+};
+
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+/** Decodifica uma chave pública X25519 (base64url, 32 bytes) lida de um registro de texto. */
+export function decodePublicKey(text: string | null, code: "pubkey" | "readerkey", record: string): Uint8Array {
+  if (!text) throw new RecordsError(code, `Falta o registro ${record}.`);
   let bytes: Uint8Array;
   try {
-    bytes = fromBase64Url(value);
+    bytes = fromBase64Url(text);
   } catch {
-    throw new EnsResolutionError(`${field} must be valid base64url`);
+    throw new RecordsError(code, `O registro ${record} não é base64url válido.`);
   }
-  if (bytes.length !== 32) throw new EnsResolutionError(`${field} must be 32 bytes`);
-  return value;
+  if (bytes.length !== 32) throw new RecordsError(code, `O registro ${record} deve ter 32 bytes (tem ${bytes.length}).`);
+  return bytes;
 }
 
-/** Valida o registro `denuncia.version` (inteiro positivo em decimal). */
-export function parseVersionRecord(value: string | undefined): number {
-  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
-    throw new EnsResolutionError("denuncia.version must be a positive integer");
-  }
-  const version = Number(value);
-  if (!Number.isSafeInteger(version)) throw new EnsResolutionError("denuncia.version is out of range");
-  return version;
-}
+/** Valida e interpreta os registros publicados pela redação no ENS. */
+export function parseNewsroomRecords(raw: RawNewsroomRecords): NewsroomInfo {
+  const publicKey = decodePublicKey(raw.pubkey, "pubkey", "denuncia.pubkey");
 
-/** Converte os registros textuais + custodiante em `NewsroomInfo` validado. */
-export function parseNewsroomRecords(name: string, records: NewsroomRecords): NewsroomInfo {
-  if (!isNewsroomName(name)) throw new EnsResolutionError(`invalid newsroom name: ${name}`);
-  const publicKey = parsePublicKeyRecord(records.key, "denuncia.key");
-  const version = parseVersionRecord(records.version);
-  let policy;
+  if (raw.version === null || !/^[1-9][0-9]*$/.test(raw.version)) {
+    throw new RecordsError("version", "O registro denuncia.pubkey.version deve ser um inteiro positivo.");
+  }
+  const pubkeyVersion = Number(raw.version);
+
+  if (!raw.policy) throw new RecordsError("policy", "Falta o registro denuncia.policy.");
+  let policy: NewsroomPolicy;
   try {
-    policy = parsePolicy(records.policy ?? "");
-  } catch (error) {
-    throw new EnsResolutionError(`invalid denuncia.policy: ${(error as Error).message}`);
+    policy = parsePolicy(raw.policy);
+  } catch (e) {
+    throw new RecordsError("policy", `O registro denuncia.policy é inválido: ${e instanceof PolicyError ? e.message : String(e)}`);
   }
-  const custodianAddress = records.custodianAddress;
-  if (typeof custodianAddress !== "string" || !isAddress(custodianAddress) || custodianAddress.toLowerCase() === zeroAddress) {
-    throw new EnsResolutionError("newsroom has no valid custodian address");
+
+  const relayers = (raw.relayer ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  for (const r of relayers) {
+    let url: URL | null = null;
+    try {
+      url = new URL(r);
+    } catch {
+      /* inválida */
+    }
+    if (!url || url.protocol !== "https:") throw new RecordsError("relayer", `O relayer "${r}" em denuncia.relayer deve ser uma URL https.`);
   }
-  return { name, publicKey, version, policy, custodianAddress: custodianAddress as Address };
+
+  if (!raw.custodian || !isAddress(raw.custodian, { strict: false }) || raw.custodian.toLowerCase() === ZERO) {
+    throw new RecordsError("custodian", "A redação não tem um endereço (custodiante) publicado.");
+  }
+
+  return { name: raw.name, publicKey, pubkeyVersion, policy, relayers, custodian: raw.custodian as Address };
 }

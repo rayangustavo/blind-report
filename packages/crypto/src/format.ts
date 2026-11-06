@@ -1,123 +1,100 @@
 import type { Envelope } from "@blind-report/core";
-import { MAX_RECIPIENTS } from "./constants";
-import { CryptoError } from "./errors";
+import { CryptoError } from "./errors.ts";
+import { sodium } from "./sodium.ts";
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder("utf-8", { fatal: true });
-const UINT32_MAX = 0xffffffff;
+// Contêiner binário: "SW" | versão (1 byte) | tamanho do cabeçalho (4 bytes, big-endian) | cabeçalho JSON | ciphertext cru.
+// O ciphertext não passa por base64, o que evitaria ~33% de inflação no limite de 128 KiB do Arkiv.
+const MAGIC = [0x53, 0x57];
+const FORMAT_VERSION = 1;
+const PREAMBLE = 7;
+const MAX_HEADER_BYTES = 64 * 1024;
+const B64 = sodium.base64_variants.URLSAFE_NO_PADDING;
+const HASH_RE = /^0x[0-9a-f]{64}$/;
 
-function fail(message: string): never {
-  throw new CryptoError(message);
-}
+type Header = {
+  v: 1;
+  newsroom: string;
+  pubkeyVersion: number;
+  category: string;
+  wrappedKeys: { recipient: string; sealed: string }[];
+  nonce: string;
+  contentHash: string;
+  commitment: string;
+  mailboxPub: string;
+  clientTs: number;
+};
 
-function assertEnvelope(envelope: Envelope): void {
-  if (typeof envelope !== "object" || envelope === null) fail("envelope is required");
-  if (!Number.isSafeInteger(envelope.version) || envelope.version < 0 || envelope.version > UINT32_MAX) {
-    fail("envelope.version must be a uint32");
-  }
-  for (const field of ["newsroom", "category", "epoch", "ephemeralPublicKey", "contentHash"] as const) {
-    if (typeof envelope[field] !== "string") fail(`envelope.${field} must be a string`);
-  }
-  if (!Array.isArray(envelope.recipientKeys)) fail("envelope.recipientKeys must be an array");
-  if (envelope.recipientKeys.length > MAX_RECIPIENTS) {
-    fail(`envelope.recipientKeys may have at most ${MAX_RECIPIENTS} entries`);
-  }
-  if (!envelope.recipientKeys.every((key) => typeof key === "string")) {
-    fail("envelope.recipientKeys must contain strings");
-  }
-  if (!(envelope.ciphertext instanceof Uint8Array)) fail("envelope.ciphertext must be a Uint8Array");
-  if (!(envelope.authTag instanceof Uint8Array)) fail("envelope.authTag must be a Uint8Array");
-}
-
-/**
- * Serialização binária compacta e determinística do envelope:
- * uint32 de versão, strings e arrays prefixados por tamanho, ciphertext e tag.
- */
-export function encodeEnvelope(envelope: Envelope): Uint8Array {
-  assertEnvelope(envelope);
-  const strings = [
-    envelope.newsroom,
-    envelope.category,
-    envelope.epoch,
-    envelope.ephemeralPublicKey,
-    envelope.contentHash,
-  ].map((value) => encoder.encode(value));
-  const keys = envelope.recipientKeys.map((key) => encoder.encode(key));
-
-  let size = 4;
-  for (const bytes of strings) size += 4 + bytes.length;
-  size += 4;
-  for (const bytes of keys) size += 4 + bytes.length;
-  size += 4 + envelope.ciphertext.length;
-  size += 4 + envelope.authTag.length;
-
-  const out = new Uint8Array(size);
-  const view = new DataView(out.buffer);
-  let offset = 0;
-  const putUint32 = (value: number): void => {
-    view.setUint32(offset, value);
-    offset += 4;
+export function encodeEnvelope(e: Envelope): Uint8Array {
+  const header: Header = {
+    v: 1,
+    newsroom: e.newsroom,
+    pubkeyVersion: e.pubkeyVersion,
+    category: e.category,
+    wrappedKeys: e.wrappedKeys.map((w) => ({ recipient: w.recipient, sealed: sodium.to_base64(w.sealed, B64) })),
+    nonce: sodium.to_base64(e.nonce, B64),
+    contentHash: e.contentHash,
+    commitment: e.commitment,
+    mailboxPub: sodium.to_base64(e.mailboxPub, B64),
+    clientTs: e.clientTs,
   };
-  const putBytes = (bytes: Uint8Array): void => {
-    out.set(bytes, offset);
-    offset += bytes.length;
-  };
-  const putString = (bytes: Uint8Array): void => {
-    putUint32(bytes.length);
-    putBytes(bytes);
-  };
-
-  putUint32(envelope.version);
-  for (const bytes of strings) putString(bytes);
-  putUint32(keys.length);
-  for (const bytes of keys) putString(bytes);
-  putUint32(envelope.ciphertext.length);
-  putBytes(envelope.ciphertext);
-  putUint32(envelope.authTag.length);
-  putBytes(envelope.authTag);
+  const head = new TextEncoder().encode(JSON.stringify(header));
+  const out = new Uint8Array(PREAMBLE + head.length + e.ciphertext.length);
+  out.set(MAGIC, 0);
+  out[2] = FORMAT_VERSION;
+  new DataView(out.buffer).setUint32(3, head.length, false);
+  out.set(head, PREAMBLE);
+  out.set(e.ciphertext, PREAMBLE + head.length);
   return out;
 }
 
-/** Lê a serialização binária produzida por `encodeEnvelope`. */
+const bad = (msg: string) => new CryptoError("format", msg);
+
+function b64(value: unknown, field: string, length?: number): Uint8Array {
+  if (typeof value !== "string") throw bad(`Campo inválido: ${field}`);
+  let bytes: Uint8Array;
+  try {
+    bytes = sodium.from_base64(value, B64);
+  } catch {
+    throw bad(`Campo inválido: ${field}`);
+  }
+  if (length !== undefined && bytes.length !== length) throw bad(`Tamanho inválido: ${field}`);
+  return bytes;
+}
+
 export function decodeEnvelope(bytes: Uint8Array): Envelope {
-  if (!(bytes instanceof Uint8Array)) fail("envelope bytes must be a Uint8Array");
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = 0;
+  if (bytes.length < PREAMBLE || bytes[0] !== MAGIC[0] || bytes[1] !== MAGIC[1]) throw bad("Não é um envelope do Blind Report.");
+  if (bytes[2] !== FORMAT_VERSION) throw bad(`Versão de formato desconhecida: ${bytes[2]}`);
+  const headLen = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(3, false);
+  if (headLen > MAX_HEADER_BYTES || PREAMBLE + headLen > bytes.length) throw bad("Cabeçalho do envelope inválido ou truncado.");
 
-  const readUint32 = (): number => {
-    if (offset + 4 > bytes.length) fail("envelope is truncated");
-    const value = view.getUint32(offset);
-    offset += 4;
-    return value;
-  };
-  const readBytes = (length: number): Uint8Array => {
-    if (offset + length > bytes.length) fail("envelope is truncated");
-    const out = bytes.slice(offset, offset + length);
-    offset += length;
-    return out;
-  };
-  const readString = (): string => {
-    const raw = readBytes(readUint32());
-    try {
-      return decoder.decode(raw);
-    } catch {
-      return fail("envelope contains invalid UTF-8");
-    }
-  };
+  let h: Partial<Header>;
+  try {
+    h = JSON.parse(new TextDecoder().decode(bytes.subarray(PREAMBLE, PREAMBLE + headLen))) as Partial<Header>;
+  } catch {
+    throw bad("Cabeçalho do envelope ilegível.");
+  }
+  if (h.v !== 1) throw bad("Versão do envelope não suportada.");
+  if (typeof h.newsroom !== "string" || typeof h.category !== "string") throw bad("Campos de texto inválidos.");
+  if (!Number.isInteger(h.pubkeyVersion) || (h.pubkeyVersion as number) < 1) throw bad("Versão da chave inválida.");
+  if (!Number.isInteger(h.clientTs)) throw bad("Carimbo de tempo inválido.");
+  if (typeof h.contentHash !== "string" || !HASH_RE.test(h.contentHash)) throw bad("Hash do conteúdo inválido.");
+  if (typeof h.commitment !== "string" || !HASH_RE.test(h.commitment)) throw bad("Compromisso inválido.");
+  if (!Array.isArray(h.wrappedKeys) || h.wrappedKeys.length === 0) throw bad("Sem chaves embrulhadas.");
 
-  const version = readUint32();
-  const newsroom = readString();
-  const category = readString();
-  const epoch = readString();
-  const ephemeralPublicKey = readString();
-  const contentHash = readString();
-  const recipientCount = readUint32();
-  if (recipientCount > MAX_RECIPIENTS) fail("envelope has too many recipients");
-  const recipientKeys: string[] = [];
-  for (let index = 0; index < recipientCount; index += 1) recipientKeys.push(readString());
-  const ciphertext = readBytes(readUint32());
-  const authTag = readBytes(readUint32());
-  if (offset !== bytes.length) fail("envelope has trailing bytes");
-
-  return { version, newsroom, category, epoch, recipientKeys, ephemeralPublicKey, ciphertext, authTag, contentHash };
+  return {
+    v: 1,
+    newsroom: h.newsroom,
+    pubkeyVersion: h.pubkeyVersion as number,
+    category: h.category,
+    wrappedKeys: h.wrappedKeys.map((w, i) => {
+      if (typeof w?.recipient !== "string") throw bad(`Chave embrulhada inválida: ${i}`);
+      return { recipient: w.recipient, sealed: b64(w.sealed, `wrappedKeys[${i}]`) };
+    }),
+    nonce: b64(h.nonce, "nonce", sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES),
+    ciphertext: bytes.slice(PREAMBLE + headLen),
+    contentHash: h.contentHash,
+    commitment: h.commitment,
+    mailboxPub: b64(h.mailboxPub, "mailboxPub", sodium.crypto_box_PUBLICKEYBYTES),
+    clientTs: h.clientTs as number,
+  };
 }

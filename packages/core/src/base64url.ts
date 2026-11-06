@@ -1,34 +1,32 @@
-import { Base64UrlError } from "./errors";
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const LOOKUP = new Map([...ALPHABET].map((c, i) => [c, i]));
 
-const BASE64URL_RE = /^[A-Za-z0-9_-]*$/;
-const CHUNK = 0x8000;
-
-/** Codifica bytes em base64url sem padding (RFC 4648 §5). */
+/** Base64 seguro para URL, sem preenchimento (=). Usado para chaves públicas em registros de texto do ENS. */
 export function toBase64Url(bytes: Uint8Array): string {
-  if (!(bytes instanceof Uint8Array)) {
-    throw new Base64UrlError("expected a Uint8Array");
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes[i]! << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0);
+    out += ALPHABET[(n >> 18) & 63]! + ALPHABET[(n >> 12) & 63]!;
+    if (i + 1 < bytes.length) out += ALPHABET[(n >> 6) & 63]!;
+    if (i + 2 < bytes.length) out += ALPHABET[n & 63]!;
   }
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return out;
 }
 
-/** Decodifica uma string base64url sem padding em bytes. */
 export function fromBase64Url(text: string): Uint8Array {
-  if (typeof text !== "string" || !BASE64URL_RE.test(text) || text.length % 4 === 1) {
-    throw new Base64UrlError("invalid base64url string");
+  if (text.length % 4 === 1) throw new RangeError("Tamanho base64url impossível.");
+  const out: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const ch of text) {
+    const v = LOOKUP.get(ch);
+    if (v === undefined) throw new RangeError(`Caractere base64url inválido: "${ch}"`);
+    buffer = (buffer << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push((buffer >> bits) & 0xff);
+    }
   }
-  const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-  let binary: string;
-  try {
-    binary = atob(padded);
-  } catch {
-    throw new Base64UrlError("invalid base64url string");
-  }
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
-  return out;
+  return Uint8Array.from(out);
 }

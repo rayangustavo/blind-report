@@ -1,85 +1,75 @@
-import { ENS_KEYS, InvalidNewsroomNameError, isNewsroomName } from "@blind-report/core";
-import { isAddress, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
-import { ETHRegistryAbi, PermissionedResolverAbi } from "./abis/index";
-import { nodeForName } from "./dns";
-import { EnsResolutionError } from "./errors";
-import { parseNewsroomRecords, parsePublicKeyRecord } from "./records";
-import type { NewsroomInfo } from "./types";
+import { ENS_KEYS, isNewsroomName } from "@blind-report/core";
+import type { Address } from "viem";
+import { ABIS, ENSV2_SEPOLIA } from "./deployments.ts";
+import { InvalidNameError, NewsroomNotFoundError, RecordsError } from "./errors.ts";
+import { decodePublicKey, parseNewsroomRecords, type NewsroomInfo } from "./records.ts";
 
-export type ReaderDeps = {
-  viemClient: PublicClient;
-  registryAddress: Address;
+/** O mínimo do cliente de leitura (um PublicClient do viem satisfaz); injetável para testes. */
+export type EnsReadClient = {
+  getEnsText(args: { name: string; key: string; universalResolverAddress: Address }): Promise<string | null>;
+  getEnsAddress(args: { name: string; universalResolverAddress: Address }): Promise<Address | null>;
+  readContract(args: { address: Address; abi: readonly unknown[]; functionName: string; args: readonly unknown[] }): Promise<unknown>;
 };
 
-export type EnsReader = {
-  resolveNewsroom(name: string): Promise<NewsroomInfo>;
-  resolveReaderKey(subname: string): Promise<string>;
+export type ReaderOptions = {
+  client: EnsReadClient;
+  universalResolver?: Address;
+  ethRegistry?: Address;
+  ethRegistrar?: Address;
 };
 
-/** Cria um leitor ENSv2 que resolve redações e chaves de leitura de jornalistas. */
-export function createReader(deps: ReaderDeps): EnsReader {
-  if (typeof deps !== "object" || deps === null) throw new EnsResolutionError("reader dependencies are required");
-  const { viemClient, registryAddress } = deps;
-  if (typeof viemClient !== "object" || viemClient === null || typeof viemClient.readContract !== "function") {
-    throw new EnsResolutionError("viemClient with readContract is required");
-  }
-  if (typeof registryAddress !== "string" || !isAddress(registryAddress)) {
-    throw new EnsResolutionError("registryAddress must be a valid address");
-  }
+const ZERO = "0x0000000000000000000000000000000000000000";
+const JOURNALIST_RE = /^([a-z0-9][a-z0-9-]*)\.([a-z0-9][a-z0-9-]*)\.eth$/;
 
-  async function resolverOf(name: string, node: Hex): Promise<Address> {
-    const resolver = await viemClient.readContract({
-      address: registryAddress,
-      abi: ETHRegistryAbi,
-      functionName: "resolver",
-      args: [node],
-    });
-    if (typeof resolver !== "string" || !isAddress(resolver) || resolver.toLowerCase() === zeroAddress) {
-      throw new EnsResolutionError(`name has no resolver: ${name}`);
-    }
-    return resolver as Address;
-  }
+export function createReader(options: ReaderOptions) {
+  const { client } = options;
+  const universalResolver = options.universalResolver ?? (ENSV2_SEPOLIA.universalResolver as Address);
+  const ethRegistry = options.ethRegistry ?? (ENSV2_SEPOLIA.ethRegistry as Address);
+  const ethRegistrar = options.ethRegistrar ?? (ENSV2_SEPOLIA.ethRegistrar as Address);
+  const text = (name: string, key: string) => client.getEnsText({ name, key, universalResolverAddress: universalResolver });
 
-  async function readText(resolver: Address, node: Hex, key: string): Promise<string> {
-    const value = await viemClient.readContract({
-      address: resolver,
-      abi: PermissionedResolverAbi,
-      functionName: "text",
-      args: [node, key],
-    });
-    return typeof value === "string" ? value : "";
-  }
-
-  return {
+  const reader = {
+    /** Resolve a redação só pelo nome (Universal Resolver). */
     async resolveNewsroom(name: string): Promise<NewsroomInfo> {
-      if (!isNewsroomName(name)) throw new InvalidNewsroomNameError(name);
-      const node = nodeForName(name);
-      const resolver = await resolverOf(name, node);
-      const [key, version, policy, custodian] = await Promise.all([
-        readText(resolver, node, ENS_KEYS.KEY),
-        readText(resolver, node, ENS_KEYS.VERSION),
-        readText(resolver, node, ENS_KEYS.POLICY),
-        viemClient.readContract({
-          address: registryAddress,
-          abi: ETHRegistryAbi,
-          functionName: "owner",
-          args: [node],
-        }),
+      if (!isNewsroomName(name)) throw new InvalidNameError(name, "esperado um nome .eth em minúsculas");
+      const [pubkey, version, policy, relayer, custodian] = await Promise.all([
+        text(name, ENS_KEYS.pubkey),
+        text(name, ENS_KEYS.pubkeyVersion),
+        text(name, ENS_KEYS.policy),
+        text(name, ENS_KEYS.relayer),
+        client.getEnsAddress({ name, universalResolverAddress: universalResolver }),
       ]);
-      return parseNewsroomRecords(name, {
-        key,
-        version,
-        policy,
-        custodianAddress: typeof custodian === "string" ? custodian : undefined,
-      });
+      if (!pubkey && !version && !policy && !relayer && !custodian) throw new NewsroomNotFoundError(name);
+      return parseNewsroomRecords({ name, pubkey, version, policy, relayer, custodian });
     },
 
-    async resolveReaderKey(subname: string): Promise<string> {
-      if (!isNewsroomName(subname)) throw new InvalidNewsroomNameError(subname);
-      const node = nodeForName(subname);
-      const resolver = await resolverOf(subname, node);
-      const value = await readText(resolver, node, ENS_KEYS.READER_KEY);
-      return parsePublicKeyRecord(value, ENS_KEYS.READER_KEY);
+    /** O nome `.eth` de segundo nível está livre para registrar? (O registrar é a fonte da verdade.) */
+    async isNameAvailable(name: string): Promise<boolean> {
+      if (!isNewsroomName(name) || name.slice(0, -4).includes(".")) throw new InvalidNameError(name, "esperado um nome .eth de segundo nível, em minúsculas");
+      return (await client.readContract({ address: ethRegistrar, abi: ABIS.ethRegistrar, functionName: "isAvailable", args: [name.slice(0, -4)] })) as boolean;
+    },
+
+    /** Chave de leitura do jornalista. Atenção: continua legível depois de revogar ou expirar (use isActiveJournalist). */
+    async resolveReaderKey(name: string): Promise<Uint8Array> {
+      return decodePublicKey(await text(name, ENS_KEYS.readerKey), "readerkey", ENS_KEYS.readerKey);
+    },
+
+    /** Dono do subnome do jornalista no registry, ou `null` se não está ativo. Decidido pelo registry, nunca pelo texto. */
+    async journalistOwner(name: string): Promise<Address | null> {
+      const m = JOURNALIST_RE.exec(name);
+      if (!m) throw new InvalidNameError(name, "esperado <jornalista>.<redação>.eth");
+      const [, journalist, newsroom] = m as unknown as [string, string, string];
+      const subregistry = (await client.readContract({ address: ethRegistry, abi: ABIS.ethRegistry, functionName: "getSubregistry", args: [newsroom] })) as string;
+      if (subregistry.toLowerCase() === ZERO) return null;
+      const owner = (await client.readContract({ address: subregistry as Address, abi: ABIS.userRegistry, functionName: "findOwner", args: [journalist] })) as string;
+      return owner.toLowerCase() === ZERO ? null : (owner as Address);
+    },
+
+    /** O jornalista está ativo? */
+    async isActiveJournalist(name: string): Promise<boolean> {
+      return (await reader.journalistOwner(name)) !== null;
     },
   };
+  return reader;
 }
+export { RecordsError };

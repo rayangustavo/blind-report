@@ -2,14 +2,13 @@
   "name": "@blind-report/ens-client",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": {
-    ".": "./src/index.ts"
-  },
+  "main": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@blind-report/core": "0.0.0",
-    "viem": "^2.57.14"
+    "@blind-report/core": "*",
+    "@blind-report/network-policy": "*",
+    "viem": "^2.38.0"
   }
 }
