@@ -1,5 +1,19 @@
-node_modules/
+node_modules
+dist
+coverage
 .env
+.env.*
+!.env.example
+data
+*.log
 .DS_Store
-dist/
-.cache/
+apps/web-source/dist
+apps/web-newsroom/dist
+.~lock.*
+
+# Work planning folders & instructions (never commit)
+person-1/
+person-2/
+person-3/
+planejamento/
+*.plan.md
