@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["packages/*/test/**/*.test.ts", "apps/*/test/**/*.test.ts", "tests/contract/**/*.test.ts"],
+    include: ["packages/*/test/**/*.test.ts", "apps/*/test/**/*.test.ts", "tests/contract/**/*.test.ts", "tests/e2e/partner-prizes.test.ts"],
     exclude: ["**/*.int.test.ts", "**/*.e2e.test.ts", "validation/**", "**/node_modules/**"],
     coverage: {
       provider: "v8",
