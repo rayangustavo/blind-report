@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, http, type Address, type Hex } from "viem";
 import { sepolia } from "viem/chains";
 import { createPublicClient as createArkivClient, createWalletClient as createArkivWalletClient } from "@arkiv-network/sdk";
 import { rabdi } from "@arkiv-network/sdk/chains";
-import { createReader, ENSV2_SEPOLIA, type EnsReadClient } from "@blind-report/ens-client";
+import { ABIS, createReader, ENSV2_SEPOLIA, type EnsReadClient } from "@blind-report/ens-client";
 import { createSdkBackend, type EntityKind } from "@blind-report/arkiv-store";
 import { createRpContextSigner } from "@blind-report/worldid-gate";
 import { isAllowed } from "@blind-report/network-policy";
@@ -114,5 +114,27 @@ describe("🌐 Sepolia & Testnets Live Integration Suite", () => {
     expect(isAllowed(config.networkPolicy, "https://developer.world.org/api/v4/verify")).toBe(true);
     expect(isAllowed(config.networkPolicy, "https://ethereum-sepolia-rpc.publicnode.com")).toBe(true);
     expect(isAllowed(config.networkPolicy, "https://rpc.rabdi.db-chain.testnet.arkiv.network")).toBe(true);
+  });
+
+  it("valida saldo em SepoliaETH e capacidade de transação on-chain da conta OWNER", async () => {
+    const pk = (process.env.OWNER_PRIVATE_KEY || "").trim() as Hex;
+    expect(pk).toMatch(/^0x[0-9a-fA-F]{64}$/);
+
+    const account = privateKeyToAccount(pk);
+    const client = createPublicClient({ chain: sepolia, transport: http(sepoliaRpc) });
+    const balance = await client.getBalance({ address: account.address });
+
+    // Confirma que a conta possui saldo ativo na Sepolia (> 0.01 SepoliaETH)
+    expect(balance).toBeGreaterThan(10_000_000_000_000_000n);
+
+    // Simula transação de mint do mockUSDC para registro no ENSv2 da Sepolia
+    const sim = await client.simulateContract({
+      address: ENSV2_SEPOLIA.mockUSDC,
+      abi: ABIS.mockUSDC,
+      functionName: "mint",
+      args: [account.address, 100_000_000n],
+      account,
+    });
+    expect(sim.request).toBeDefined();
   });
 });
