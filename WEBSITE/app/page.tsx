@@ -35,6 +35,9 @@ import {
 import { useWebsiteController } from '../lib/use-website-controller'
 import { STATUS_LABELS, type ReportItem } from '../lib/website-controller'
 import { RelayerStatusBadge } from '../components/relayer-status'
+import { ProductionEvaluatorCallout } from '../components/production-evaluator-callout'
+import { MetaMaskModal } from '../components/metamask-modal'
+import { OnChainTxBadge } from '../components/onchain-tx-badge'
 
 function Logo() {
   return (
@@ -72,7 +75,6 @@ export default function App() {
     setActiveDeskTab,
     clearAlerts,
     connectWallet,
-    switchDemoRole,
     disconnectWallet,
     registerNewsroom,
     rotateKey,
@@ -91,12 +93,21 @@ export default function App() {
     submitReport,
     readRepliesWithReceipt,
     verifyAuthorship,
-  } = useWebsiteController()
+  } = useWebsiteController(undefined, { mode: 'production' })
 
   const [verifyText, setVerifyText] = useState('')
   const [verifySaltHex, setVerifySaltHex] = useState('')
   const [receiptInput, setReceiptInput] = useState('')
   const [copied, setCopied] = useState(false)
+  const [metaMaskModalOpen, setMetaMaskModalOpen] = useState(false)
+
+  const handleConnectWallet = async () => {
+    if (typeof window !== 'undefined' && !(window as any).ethereum) {
+      setMetaMaskModalOpen(true)
+      return
+    }
+    await connectWallet()
+  }
 
   const copyToClipboard = (text: string) => {
     if (typeof navigator !== 'undefined') {
@@ -108,6 +119,9 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      {/* AVISO DO AVALIADOR / JÚRI ETHGLOBAL */}
+      <ProductionEvaluatorCallout />
+
       {/* HEADER PRINCIPAL */}
       <header className="site-header">
         <button className="logo-button" onClick={() => navigate('home')} aria-label="Back to home">
@@ -132,7 +146,7 @@ export default function App() {
           </button>
         </nav>
 
-        {/* WEB3 WALLET & DEMO BAR */}
+        {/* WEB3 WALLET (PRODUÇÃO: METAMASK EXCLUSIVA) */}
         <div className="wallet-box">
           {state.walletAddress ? (
             <div className="flex items-center gap-2">
@@ -145,17 +159,9 @@ export default function App() {
               </button>
             </div>
           ) : (
-            <div className="demo-role-selector">
-              <button className="wallet-btn" onClick={() => connectWallet()} title="Connect MetaMask (Sepolia)">
-                <Wallet size={14} /> Connect MetaMask
-              </button>
-              <button className="demo-badge-btn" onClick={() => switchDemoRole('admin')} title="1-Click Demo: Connect as Newsroom Owner">
-                ⚡ Demo Owner
-              </button>
-              <button className="demo-badge-btn" onClick={() => switchDemoRole('journalist')} title="1-Click Demo: Connect as Authorized Reporter">
-                ⚡ Demo Reporter
-              </button>
-            </div>
+            <button className="wallet-btn" onClick={handleConnectWallet} title="Connect MetaMask on Sepolia">
+              <Wallet size={14} /> Connect MetaMask
+            </button>
           )}
         </div>
 
@@ -163,6 +169,9 @@ export default function App() {
           <Menu size={20} />
         </button>
       </header>
+
+      {/* ON-CHAIN SEPOLIA TRANSACTION BADGE */}
+      {state.lastTx && <OnChainTxBadge tx={state.lastTx} />}
 
       {/* NOTICES / ALERTAS GLOBAIS */}
       {state.notice && (
@@ -173,6 +182,10 @@ export default function App() {
       )}
       {state.error && (
         <div className="app-notice error">
+          <span>{state.error}</span>
+          <button onClick={clearAlerts}><X size={15} /></button>
+        </div>
+      )}
           <span>{state.error}</span>
           <button onClick={clearAlerts}><X size={15} /></button>
         </div>
@@ -433,8 +446,7 @@ export default function App() {
           readerKey={state.readerKey}
           sharedKeyringBlob={state.sharedKeyringBlob}
           backupText={state.backupText}
-          onConnect={() => connectWallet()}
-          onDemoRole={switchDemoRole}
+          onConnect={handleConnectWallet}
           onDecrypt={decryptSelectedReport}
           onSaveNote={saveInternalNote}
           onUpdateStatus={updateReportStatus}
@@ -453,6 +465,9 @@ export default function App() {
           onBack={() => navigate('home')}
         />
       )}
+
+      {/* MODAL ORIENTATIVO DE METAMASK EM PRODUÇÃO */}
+      <MetaMaskModal isOpen={metaMaskModalOpen} onClose={() => setMetaMaskModalOpen(false)} />
 
       {/* FOOTER */}
       <footer className="site-footer">
