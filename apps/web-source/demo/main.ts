@@ -136,9 +136,9 @@ function specter(className = "specter"): SVGElement {
       svgEl(
         "linearGradient",
         { id: `${id}-g`, x1: "10", y1: "8", x2: "58", y2: "68", gradientUnits: "userSpaceOnUse" },
-        svgEl("stop", { offset: "0", "stop-color": "#a9c2ff" }),
-        svgEl("stop", { offset: "0.45", "stop-color": "#8b8dff" }),
-        svgEl("stop", { offset: "1", "stop-color": "#c77bff" }),
+        svgEl("stop", { offset: "0", "stop-color": "#f2c879" }),
+        svgEl("stop", { offset: "0.45", "stop-color": "#e2a13c" }),
+        svgEl("stop", { offset: "1", "stop-color": "#c14b2d" }),
       ),
       svgEl(
         "radialGradient",
@@ -152,12 +152,12 @@ function specter(className = "specter"): SVGElement {
     svgEl(
       "g",
       { className: "specter-eyes" },
-      svgEl("ellipse", { cx: "25", cy: "31", rx: "2.7", ry: "4.3", fill: "#07101f" }),
-      svgEl("ellipse", { cx: "41", cy: "31", rx: "2.7", ry: "4.3", fill: "#07101f" }),
+      svgEl("ellipse", { cx: "25", cy: "31", rx: "2.7", ry: "4.3", fill: "#2a1412" }),
+      svgEl("ellipse", { cx: "41", cy: "31", rx: "2.7", ry: "4.3", fill: "#2a1412" }),
     ),
-    svgEl("path", { d: "M29 41.5c2.3 2.2 5.7 2.2 8 0", stroke: "rgba(7,16,31,0.72)", "stroke-width": "1.8", "stroke-linecap": "round" }),
-    svgEl("ellipse", { cx: "18", cy: "38", rx: "3.4", ry: "2", fill: "rgba(255,140,210,0.28)" }),
-    svgEl("ellipse", { cx: "48", cy: "38", rx: "3.4", ry: "2", fill: "rgba(255,140,210,0.28)" }),
+    svgEl("path", { d: "M29 41.5c2.3 2.2 5.7 2.2 8 0", stroke: "rgba(42,20,18,0.75)", "stroke-width": "1.8", "stroke-linecap": "round" }),
+    svgEl("ellipse", { cx: "18", cy: "38", rx: "3.4", ry: "2", fill: "rgba(240,150,90,0.34)" }),
+    svgEl("ellipse", { cx: "48", cy: "38", rx: "3.4", ry: "2", fill: "rgba(240,150,90,0.34)" }),
   );
 }
 
@@ -1462,9 +1462,19 @@ async function start() {
       ["respostas", "Respostas"],
       ["verificar", "Verificar"],
     ];
+    const today = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
     return h(
       "header",
       { className: "topbar" },
+      h(
+        "div",
+        { className: "masthead", "aria-hidden": "true" },
+        h("span", { className: "masthead-kicker" }, "Mesa de denúncias"),
+        h("span", { className: "masthead-sep" }),
+        h("span", { className: "masthead-note" }, "Jornalismo independente · canal cifrado"),
+        h("span", { className: "masthead-sep" }),
+        h("span", { className: "masthead-date" }, today),
+      ),
       h(
         "div",
         { className: "nav-shell" },
