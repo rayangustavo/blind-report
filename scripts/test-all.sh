@@ -39,11 +39,13 @@ echo -e "${YELLOW}Executando suíte completa de testes com medição de cobertur
 npm run test:coverage
 success "Todos os testes unitários passaram com cobertura superior a 95%."
 
-header "4/5: COMPILAÇÃO DAS APLICAÇÕES WEB (FRONTENDS ESTÁTICOS)"
+header "4/5: COMPILAÇÃO DAS APLICAÇÕES WEB (FRONTENDS ESTÁTICOS & NEXT.JS)"
 echo -e "${YELLOW}Compilando portal da fonte anônima (web-source)...${NC}"
 npm run build -w apps/web-source
 echo -e "${YELLOW}Compilando painel editorial do jornalista (web-newsroom)...${NC}"
 npm run build -w apps/web-newsroom
+echo -e "${YELLOW}Compilando novo portal unificado Next.js 16 (WEBSITE)...${NC}"
+npm run website:build
 success "Aplicações web compiladas com sucesso para distribuição estática segura."
 
 header "5/5: SIMULAÇÃO DO FLUXO CRIPTOGRÁFICO DE PONTA A PONTA (E2E)"

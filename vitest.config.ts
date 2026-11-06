@@ -1,10 +1,16 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 // Todos os testes são scripts em Node (sem navegador). Integração, E2E e validação rodam por scripts próprios.
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@": resolve(import.meta.dirname, "WEBSITE"),
+    },
+  },
   test: {
     environment: "node",
-    include: ["packages/*/test/**/*.test.ts", "apps/*/test/**/*.test.ts", "tests/contract/**/*.test.ts", "tests/e2e/partner-prizes.test.ts"],
+    include: ["packages/*/test/**/*.test.ts", "apps/*/test/**/*.test.ts", "WEBSITE/test/**/*.test.ts", "tests/contract/**/*.test.ts", "tests/e2e/partner-prizes.test.ts"],
     exclude: ["**/*.int.test.ts", "**/*.e2e.test.ts", "validation/**", "**/node_modules/**"],
     coverage: {
       provider: "v8",

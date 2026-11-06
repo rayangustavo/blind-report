@@ -38,7 +38,9 @@
     "website:install": "npm --prefix WEBSITE install",
     "website:dev": "npm --prefix WEBSITE run dev",
     "website:build": "npm --prefix WEBSITE run build",
-    "website:start": "npm --prefix WEBSITE run start"
+    "website:start": "npm --prefix WEBSITE run start",
+    "website:test": "vitest run WEBSITE/test",
+    "test:website": "vitest run WEBSITE/test"
   },
   "devDependencies": {
     "@arkiv-network/sdk": "^1.0.0",
