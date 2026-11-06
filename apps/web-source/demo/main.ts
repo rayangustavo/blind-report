@@ -5,6 +5,7 @@ import { toBase64Url } from "@blind-report/core";
 import { SourceError } from "@blind-report/source-client";
 import { cancellable, createSourceController, type SourceState } from "../src/controller.ts";
 import { download, h, readFileBytes, readFileText } from "../src/dom.ts";
+import { setupScrolly } from "./motion.ts";
 
 type Tab = "enviar" | "respostas" | "verificar";
 type IconName = "shield" | "lock" | "key" | "eyeOff" | "github" | "check" | "download" | "fingerprint" | "cube";
@@ -168,6 +169,7 @@ function ambient(): HTMLElement {
     h("span", { className: "orb orb-a" }),
     h("span", { className: "orb orb-b" }),
     h("span", { className: "orb orb-c" }),
+    h("span", { className: "cursor-glow" }),
   );
 }
 
@@ -591,6 +593,377 @@ async function start() {
     );
   }
 
+  function scrollToId(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function wordsHeading(text: string, accentWords: string[] = []): HTMLElement {
+    const children: (HTMLElement | string)[] = [];
+    let index = 0;
+    const words = text.split(" ");
+    words.forEach((word, i) => {
+      const clean = word.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+      const span = h("span", { className: accentWords.includes(clean) ? "w accent" : "w" }, word);
+      span.style.setProperty("--i", String(index++));
+      children.push(span);
+      if (i < words.length - 1) children.push(" ");
+    });
+    return h("h2", { className: "split-reveal", "data-reveal": "" }, ...children);
+  }
+
+  function heroLanding(): HTMLElement {
+    const assurance = [
+      { icon: "shield" as IconName, label: "Sem cadastro" },
+      { icon: "eyeOff" as IconName, label: "Sem registro de IP" },
+      { icon: "key" as IconName, label: "Chave só com você" },
+    ];
+    return h(
+      "section",
+      { className: "hero immersive", id: "inicio", "data-chapter": "inicio" },
+      h("div", { className: "hero-glow", "aria-hidden": "true" }),
+      h(
+        "div",
+        { className: "hero-inner" },
+        h(
+          "div",
+          { className: "hero-copy" },
+          h("span", { className: "eyebrow", "data-reveal": "" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "Canal seguro de denúncia"),
+          h("h1", { "data-reveal": "" }, "Fale sem", h("br"), h("span", { className: "grad" }, "deixar rastro")),
+          h(
+            "p",
+            { className: "lede", "data-reveal": "" },
+            "Envie relatos e documentos a redações investigativas. Criptografia de ponta a ponta, prova de humanidade e nenhum registro de quem você é.",
+          ),
+          h(
+            "div",
+            { className: "hero-actions", "data-reveal": "" },
+            h(
+              "button",
+              {
+                className: "btn primary lg",
+                onclick: () => {
+                  scrollToId("enviar-denuncia");
+                  setTimeout(() => document.querySelector<HTMLInputElement>("#nr")?.focus({ preventScroll: true }), 620);
+                },
+              },
+              "Enviar uma denúncia",
+              h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→"),
+            ),
+            h("button", { className: "btn ghost lg", onclick: () => scrollToId("processo") }, "Ver como funciona"),
+          ),
+          h(
+            "ul",
+            { className: "hero-assurance", "data-reveal": "" },
+            ...assurance.map((item) => h("li", {}, h("span", { className: "assurance-icon" }, icon(item.icon)), item.label)),
+          ),
+        ),
+        h(
+          "div",
+          { className: "hero-visual" },
+          h("canvas", { className: "hero-field", "aria-hidden": "true" }),
+          h("span", { className: "orbit orbit-a", "aria-hidden": "true" }),
+          h("span", { className: "orbit orbit-b", "aria-hidden": "true" }),
+          h("div", { className: "field-badge" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "sessão anônima ativa"),
+          h(
+            "div",
+            { className: "field-chip chip-a" },
+            h("span", { className: "field-chip-icon" }, icon("fingerprint")),
+            h("div", {}, h("strong", {}, "ZK"), h("span", {}, "humano, não identificado")),
+          ),
+          h(
+            "div",
+            { className: "field-chip chip-b" },
+            h("span", { className: "field-chip-icon" }, icon("lock")),
+            h("div", {}, h("strong", {}, "E2E"), h("span", {}, "selado no aparelho")),
+          ),
+        ),
+      ),
+      h(
+        "div",
+        { className: "hero-foot" },
+        protocols(),
+        h(
+          "button",
+          { className: "scroll-explore", onclick: () => scrollToId("manifesto") },
+          h("span", {}, "Role para explorar"),
+          h("span", { className: "scroll-mouse", "aria-hidden": "true" }, h("i")),
+        ),
+      ),
+    );
+  }
+
+  function manifesto(): HTMLElement {
+    const stats = [
+      { value: "0", label: "dados pessoais pedidos" },
+      { value: "100%", label: "cifrado antes de sair" },
+      { value: "1", label: "cópia da chave: com você" },
+    ];
+    const words = ["medo", "represália", "vigilância", "censura", "silêncio", "esquecimento"];
+    const marquee = h(
+      "div",
+      { className: "marquee-track", "aria-hidden": "true" },
+      ...[...words, ...words].map((word) => h("span", {}, word, h("i", {}, "✦"))),
+    );
+    return h(
+      "section",
+      { className: "manifesto", id: "manifesto", "data-chapter": "manifesto" },
+      h("div", { className: "chapter-eyebrow", "data-reveal": "" }, h("span", {}, "01"), "O silêncio"),
+      wordsHeading("A verdade quase nunca chega sozinha.", ["sozinha"]),
+      h(
+        "div",
+        { className: "manifesto-grid" },
+        h(
+          "p",
+          { className: "manifesto-lede", "data-reveal": "" },
+          "Quem denuncia arrisca o emprego, a reputação e a segurança. Por isso, a maioria das histórias que importam nunca chega a ser contada. O Blind Report foi desenhado para que o medo não seja o preço da verdade.",
+        ),
+        h(
+          "div",
+          { className: "manifesto-stats" },
+          ...stats.map((stat) => h("div", { className: "manifesto-stat", "data-reveal": "" }, h("strong", {}, stat.value), h("span", {}, stat.label))),
+        ),
+      ),
+      h("div", { className: "marquee", "aria-hidden": "true" }, marquee),
+    );
+  }
+
+  const PROCESS_STEPS: { icon: IconName; title: string; text: string; points: string[] }[] = [
+    {
+      icon: "eyeOff",
+      title: "Escolha a redação",
+      text: "O nome ENSv2 é resolvido no seu aparelho. Nenhum servidor intermediário fica sabendo para quem você está escrevendo.",
+      points: ["Resolução local do nome", "Chave da redação conferida"],
+    },
+    {
+      icon: "lock",
+      title: "Escreva e sele",
+      text: "O relato e os anexos são cifrados antes de tocar a rede. Nem o nó de envio, nem o Armazenamento, nem nós conseguimos abrir.",
+      points: ["Libsodium no aparelho", "Um envelope selado, sem metadados"],
+    },
+    {
+      icon: "fingerprint",
+      title: "Prove que é humano",
+      text: "Uma prova de conhecimento zero bloqueia spam sem dizer quem você é. Um nullifier único por redação, por época.",
+      points: ["World ID · proof of personhood", "Zero dados pessoais revelados"],
+    },
+    {
+      icon: "cube",
+      title: "Guarde o recibo",
+      text: "A custódia é registrada no Arkiv e transferida para a redação. O recibo na sua mão abre respostas, autoria e verificação.",
+      points: ["Trilha imutável no Arkiv", "Recibo é a única cópia da chave"],
+    },
+  ];
+
+  function processSection(): HTMLElement {
+    return h(
+      "section",
+      { className: "process", id: "processo", "data-chapter": "processo" },
+      h(
+        "header",
+        { className: "section-head process-head", "data-reveal": "" },
+        h("span", { className: "eyebrow" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "02 · O caminho"),
+        h("h2", {}, "Quatro passos.", h("br"), h("span", { className: "grad" }, "Nenhuma pista.")),
+        h("p", { className: "muted" }, "Do primeiro clique ao recibo, cada etapa acontece no seu aparelho ou em um registro público — nunca em uma caixa-preta."),
+      ),
+      h(
+        "div",
+        { className: "process-shell" },
+        h(
+          "div",
+          { className: "process-stage", "data-reveal": "" },
+          h("canvas", { className: "morph-field", "aria-hidden": "true" }),
+          h(
+            "div",
+            { className: "process-hud" },
+            h("span", { className: "process-count" }, "01 / 04"),
+            h("span", { className: "process-tag" }, "fluxo local · cifrado"),
+          ),
+          h("div", { className: "process-progress", "aria-hidden": "true" }, h("span")),
+          h("div", { className: "process-stage-note" }, icon("shield"), "Nada legível sai deste aparelho."),
+        ),
+        h(
+          "div",
+          { className: "process-steps" },
+          ...PROCESS_STEPS.map((step, i) =>
+            h(
+              "article",
+              { className: i === 0 ? "process-step is-active" : "process-step", "data-process-step": "" },
+              h("span", { className: "process-num" }, String(i + 1).padStart(2, "0")),
+              h("span", { className: "process-step-icon" }, icon(step.icon)),
+              h("h3", {}, step.title),
+              h("p", {}, step.text),
+              h("ul", { className: "process-list" }, ...step.points.map((point) => h("li", {}, icon("check"), point))),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  function bentoCard(opts: { icon: IconName; tag: string; title: string; text: string; span: string; visual: HTMLElement; index: number }): HTMLElement {
+    const card = h(
+      "article",
+      { className: `bento-card ${opts.span}`, "data-reveal": "" },
+      h("div", { className: "bento-top" }, h("span", { className: "bento-icon" }, icon(opts.icon)), h("span", { className: "bento-tag" }, opts.tag)),
+      h("h3", {}, opts.title),
+      h("p", {}, opts.text),
+      opts.visual,
+    );
+    card.style.setProperty("--i", String(opts.index));
+    return card;
+  }
+
+  function architecture(): HTMLElement {
+    return h(
+      "section",
+      { className: "architecture", id: "arquitetura", "data-chapter": "arquitetura" },
+      h(
+        "header",
+        { className: "section-head", "data-reveal": "" },
+        h("span", { className: "eyebrow" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "03 · Arquitetura"),
+        h("h2", {}, "Segurança não é promessa.", h("br"), h("span", { className: "grad" }, "É arquitetura.")),
+        h("p", { className: "muted" }, "Quatro camadas independentes protegem a fonte e garantem que a redação receba exatamente o que foi enviado."),
+      ),
+      h("div", { className: "console-wrap", "data-reveal": "" }, consolePreview()),
+      h(
+        "div",
+        { className: "bento" },
+        bentoCard({
+          icon: "lock",
+          tag: "Libsodium",
+          title: "Cifra de ponta a ponta",
+          text: "O relato é selado com a chave pública da redação no seu aparelho. Nem o servidor de envio consegue ler.",
+          span: "span-7",
+          index: 0,
+          visual: h(
+            "div",
+            { className: "cipher-panel", "aria-hidden": "true" },
+            h("div", { className: "cipher-side" }, h("span", { className: "cipher-label" }, "no seu aparelho"), h("code", { className: "cipher-raw" }, "repasse de verbas…")),
+            h("span", { className: "cipher-arrow" }, "→"),
+            h("div", { className: "cipher-side cipher-side-out" }, h("span", { className: "cipher-label" }, "na rede"), h("code", { className: "cipher-out" }, "x9f4a·c2e1·77b0")),
+          ),
+        }),
+        bentoCard({
+          icon: "eyeOff",
+          tag: "Rede restrita",
+          title: "Nenhum rastro de rede",
+          text: "Política de rede fechada: sem trackers, sem analytics, sem chamadas externas escondidas. Só o necessário para entregar o envelope.",
+          span: "span-5",
+          index: 1,
+          visual: h(
+            "div",
+            { className: "zero-panel", "aria-hidden": "true" },
+            h("span", { className: "zero-ring" }),
+            h("span", { className: "zero-ring zero-ring-b" }),
+            h("strong", {}, "0"),
+            h("span", {}, "chamadas externas"),
+          ),
+        }),
+        bentoCard({
+          icon: "fingerprint",
+          tag: "World ID",
+          title: "Humano, não identificado",
+          text: "Uma prova de humanidade por época e por redação. Suficiente para impedir spam, incapaz de revelar quem você é.",
+          span: "span-5",
+          index: 2,
+          visual: h(
+            "div",
+            { className: "rings-panel", "aria-hidden": "true" },
+            h("span", { className: "rings-core" }, icon("fingerprint")),
+            h("span", { className: "rings-arc rings-arc-a" }),
+            h("span", { className: "rings-arc rings-arc-b" }),
+            h("span", { className: "rings-arc rings-arc-c" }),
+          ),
+        }),
+        bentoCard({
+          icon: "cube",
+          tag: "Arkiv",
+          title: "Custódia imutável",
+          text: "A denúncia é registrada no Arkiv e a custódia é transferida para a redação — com uma trilha pública e verificável.",
+          span: "span-7",
+          index: 3,
+          visual: h(
+            "div",
+            { className: "blocks-panel", "aria-hidden": "true" },
+            h("span", { className: "block-node" }, "ENV"),
+            h("i", { className: "block-link" }),
+            h("span", { className: "block-node is-accent" }, "ARK"),
+            h("i", { className: "block-link" }),
+            h("span", { className: "block-node is-ok" }, "REDAÇÃO"),
+            h("code", {}, "custody ✓ imutável"),
+          ),
+        }),
+      ),
+    );
+  }
+
+  function creed(): HTMLElement {
+    return h(
+      "section",
+      { className: "creed", id: "compromisso", "data-chapter": "compromisso" },
+      h(
+        "div",
+        { className: "creed-seal", "aria-hidden": "true" },
+        h("span", { className: "seal-ring" }),
+        h("span", { className: "seal-ring seal-ring-b" }),
+        h("span", { className: "seal-core" }, icon("shield")),
+      ),
+      h(
+        "div",
+        { className: "creed-inner" },
+        h("span", { className: "creed-kicker", "data-reveal": "" }, "04 · O compromisso"),
+        h("p", { className: "creed-line", "data-reveal": "" }, "O anonimato protege ", h("em", {}, "a fonte")),
+        h("p", { className: "creed-line creed-line-2", "data-reveal": "" }, "A arquitetura protege ", h("em", {}, "a verdade")),
+        h(
+          "div",
+          { className: "creed-actions", "data-reveal": "" },
+          h(
+            "button",
+            { className: "btn primary xl", onclick: () => scrollToId("enviar-denuncia") },
+            "Enviar uma denúncia",
+            h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→"),
+          ),
+          h("span", { className: "creed-note" }, "Menos de 2 minutos. Sem cadastro, sem e-mail, sem IP."),
+        ),
+      ),
+    );
+  }
+
+  function flowSection(body: Node, landing: boolean): HTMLElement {
+    if (!landing) {
+      return h("section", { className: "flow flow-compact", id: "enviar-denuncia" }, body);
+    }
+    return h(
+      "section",
+      { className: "flow", id: "enviar-denuncia", "data-chapter": "enviar-denuncia" },
+      h(
+        "div",
+        { className: "flow-shell" },
+        h(
+          "div",
+          { className: "flow-intro", "data-reveal": "" },
+          h("span", { className: "eyebrow" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "Comece aqui"),
+          h("h2", {}, "Comece pela", h("br"), h("span", { className: "grad" }, "redação certa.")),
+          h(
+            "p",
+            { className: "lede" },
+            "Confirme o nome ENS da redação, escreva o que sabe e receba um recibo. O resto do caminho é criptografia.",
+          ),
+          h(
+            "ul",
+            { className: "flow-points" },
+            h("li", {}, icon("check"), "Sem e-mail, telefone ou cadastro."),
+            h("li", {}, icon("check"), "O texto é cifrado antes de sair do aparelho."),
+            h("li", {}, icon("check"), "A redação nunca vê seu IP nem sua identidade."),
+            h("li", {}, icon("check"), "O recibo é a única cópia da chave de leitura."),
+          ),
+          h("div", { className: "flow-footnote" }, icon("lock"), "Demonstração com backend simulado em memória"),
+        ),
+        h("div", { className: "flow-body" }, body),
+      ),
+    );
+  }
+
   function consolePreview(): HTMLElement {
     const nodes: { icon: IconName; label: string; sub: string; cls: string }[] = [
       { icon: "eyeOff", label: "Você", sub: "dispositivo local", cls: "" },
@@ -649,6 +1022,33 @@ async function start() {
       { className: "protocols", "aria-label": "Tecnologias sobre as quais o Blind Report é construído" },
       h("span", { className: "protocols-label" }, "Construído sobre"),
       h("span", { className: "protocols-list" }, ...items.map((item) => h("span", { className: "protocol-item" }, item))),
+    );
+  }
+
+  function scrollProgress(): HTMLElement {
+    return h("div", { className: "scroll-progress", "aria-hidden": "true" }, h("span"));
+  }
+
+  function chapterNav(): HTMLElement {
+    const chapters: [string, string][] = [
+      ["inicio", "Início"],
+      ["manifesto", "Manifesto"],
+      ["processo", "O caminho"],
+      ["arquitetura", "Arquitetura"],
+      ["compromisso", "Compromisso"],
+      ["enviar-denuncia", "Denunciar"],
+    ];
+    return h(
+      "aside",
+      { className: "chapter-nav", "aria-label": "Navegação pelas seções" },
+      ...chapters.map(([id, label]) =>
+        h(
+          "button",
+          { className: "chapter-link", "data-chapter-link": id, "aria-label": label, onclick: () => scrollToId(id) },
+          h("span", { className: "chapter-dot", "aria-hidden": "true" }),
+          h("span", { className: "chapter-label" }, label),
+        ),
+      ),
     );
   }
 
@@ -718,6 +1118,7 @@ async function start() {
   }
 
   let lastView = "";
+  let disposeLanding: (() => void) | null = null;
   function render(s: SourceState) {
     const landing = tab === "enviar" && s.step === "newsroom";
     document.body.dataset.mode = tab;
@@ -754,7 +1155,27 @@ async function start() {
             ),
           ),
         ),
-        h("span", { className: "status-pill" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "Demonstração"),
+        h(
+          "div",
+          { className: "nav-actions" },
+          h(
+            "button",
+            {
+              className: "nav-cta",
+              onclick: () => {
+                if (tab !== "enviar") {
+                  tab = "enviar";
+                  render(controller.state);
+                  requestAnimationFrame(() => scrollToId("enviar-denuncia"));
+                } else {
+                  scrollToId("enviar-denuncia");
+                }
+              },
+            },
+            "Denunciar",
+          ),
+          h("span", { className: "status-pill" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "Demonstração"),
+        ),
       ),
     );
     const body = tab === "enviar" ? viewSend(s) : tab === "respostas" ? viewReplies(s) : viewVerify(s);
@@ -762,24 +1183,37 @@ async function start() {
       "div",
       { className: "page" },
       h("a", { className: "skip", href: "#conteudo" }, "Ir para o conteúdo"),
+      landing ? scrollProgress() : null,
       header,
+      landing ? chapterNav() : null,
       h(
         "main",
         { id: "conteudo" },
-        hero(heroFor(s)),
-        landing ? consolePreview() : null,
-        landing ? scrollCue() : null,
-        landing ? protocols() : null,
-        body,
-        landing ? features() : null,
+        landing ? heroLanding() : hero(heroFor(s)),
+        landing ? manifesto() : null,
+        landing ? processSection() : null,
+        landing ? architecture() : null,
+        landing ? creed() : null,
+        flowSection(body, landing),
       ),
       footer(),
     );
 
+    const previous = lastView;
     const key = `${tab}:${s.step}`;
-    if (key !== lastView) content.dataset.enter = "";
+    const changed = key !== lastView;
+    if (changed) content.dataset.enter = "";
     lastView = key;
+
+    disposeLanding?.();
+    disposeLanding = null;
     root.replaceChildren(content);
+    if (landing) disposeLanding = setupScrolly(root);
+
+    if (changed && previous) {
+      if (tab === "enviar" && s.step !== "newsroom") window.scrollTo({ top: 0, behavior: "auto" });
+      else if (landing && previous.startsWith("enviar:")) window.scrollTo({ top: 0, behavior: "auto" });
+    }
   }
 
   controller.subscribe(render);
