@@ -8,7 +8,45 @@ import { download, h, readFileBytes, readFileText } from "../src/dom.ts";
 import { setupScrolly } from "./motion.ts";
 
 type Tab = "enviar" | "respostas" | "verificar";
-type IconName = "shield" | "lock" | "key" | "eyeOff" | "github" | "check" | "download" | "fingerprint" | "cube";
+type Route = "inicio" | "seguranca" | "denunciar" | "respostas" | "verificar";
+type IconName = "shield" | "lock" | "key" | "eyeOff" | "github" | "check" | "download" | "fingerprint" | "cube" | "pin";
+
+const ROUTES: Route[] = ["inicio", "seguranca", "denunciar", "respostas", "verificar"];
+function parseRoute(): Route {
+  const raw = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+  return (ROUTES as string[]).includes(raw) ? (raw as Route) : "inicio";
+}
+const routeHref = (route: Route) => (route === "inicio" ? "#/" : `#/${route}`);
+
+type Region = { lat: number; lon: number };
+const REGIONS: Record<string, Record<string, Region>> = {
+  Brasil: {
+    "São Paulo": { lat: -23.55, lon: -46.63 },
+    "Rio de Janeiro": { lat: -22.91, lon: -43.17 },
+    Brasília: { lat: -15.79, lon: -47.88 },
+    Recife: { lat: -8.05, lon: -34.88 },
+    "Porto Alegre": { lat: -30.03, lon: -51.23 },
+  },
+  Portugal: { Lisboa: { lat: 38.72, lon: -9.14 }, Porto: { lat: 41.15, lon: -8.61 } },
+  "Estados Unidos": {
+    Washington: { lat: 38.9, lon: -77.03 },
+    "Nova York": { lat: 40.71, lon: -74.0 },
+    "Los Angeles": { lat: 34.05, lon: -118.24 },
+  },
+  "Reino Unido": { Londres: { lat: 51.51, lon: -0.13 }, Manchester: { lat: 53.48, lon: -2.24 } },
+  Argentina: { "Buenos Aires": { lat: -34.6, lon: -58.38 }, Córdoba: { lat: -31.42, lon: -64.18 } },
+  México: { "Cidade do México": { lat: 19.43, lon: -99.13 }, Monterrey: { lat: 25.69, lon: -100.32 } },
+  Angola: { Luanda: { lat: -8.84, lon: 13.23 } },
+  Moçambique: { Maputo: { lat: -25.97, lon: 32.57 } },
+  Alemanha: { Berlim: { lat: 52.52, lon: 13.4 }, Munique: { lat: 48.14, lon: 11.58 } },
+  França: { Paris: { lat: 48.86, lon: 2.35 }, Marselha: { lat: 43.3, lon: 5.37 } },
+  Índia: { "Nova Délhi": { lat: 28.61, lon: 77.21 }, Mumbai: { lat: 19.08, lon: 72.88 } },
+  Japão: { Tóquio: { lat: 35.68, lon: 139.69 }, Osaka: { lat: 34.69, lon: 135.5 } },
+  "África do Sul": { Joanesburgo: { lat: -26.2, lon: 28.05 }, "Cidade do Cabo": { lat: -33.92, lon: 18.42 } },
+};
+let regionCountry = "Brasil";
+let regionCity = "São Paulo";
+const currentRegion = (): Region => REGIONS[regionCountry]?.[regionCity] ?? REGIONS.Brasil["São Paulo"];
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const bytes = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 7 + 11) % 256);
@@ -61,6 +99,14 @@ function icon(name: IconName): SVGElement {
   if (name === "download") {
     return svgEl("svg", stroke, svgEl("path", { d: "M12 4v11" }), svgEl("path", { d: "m7 10 5 5 5-5" }), svgEl("path", { d: "M5 20h14" }));
   }
+  if (name === "pin") {
+    return svgEl(
+      "svg",
+      stroke,
+      svgEl("path", { d: "M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" }),
+      svgEl("circle", { cx: "12", cy: "10", r: "2.5" }),
+    );
+  }
   if (name === "fingerprint") {
     return svgEl(
       "svg",
@@ -97,6 +143,118 @@ function logoMark(): SVGElement {
     svgEl("path", { d: "M24 4 41 10v11.5C41 33 33.8 41 24 45 14.2 41 7 33 7 21.5V10L24 4Z", stroke: "currentColor", "stroke-width": "2.6", "stroke-linejoin": "round" }),
     svgEl("path", { d: "M13 24c3.2-4.6 7-6.9 11-6.9s7.8 2.3 11 6.9c-3.2 4.6-7 6.9-11 6.9s-7.8-2.3-11-6.9Z", stroke: "currentColor", "stroke-width": "2.4" }),
     svgEl("circle", { cx: "24", cy: "24", r: "4.2", fill: "currentColor" }),
+  );
+}
+
+const SPECTER_BODY =
+  "M33 4C18.6 4 7 15.6 7 30v32.3c0 2.6 3 4 5 2.3l5.6-4.6 5.6 4.6c1.5 1.2 3.7 1.2 5.2 0l5.6-4.6 5.6 4.6c1.5 1.2 3.7 1.2 5.2 0l5.6-4.6 5.6 4.6c2 1.7 5 .3 5-2.3V30C59 15.6 47.4 4 33 4Z";
+let specterSeq = 0;
+
+function specter(className = "specter"): SVGElement {
+  const id = `specter-${++specterSeq}`;
+  return svgEl(
+    "svg",
+    { className, viewBox: "0 0 66 74", fill: "none", "aria-hidden": "true", focusable: "false" },
+    svgEl(
+      "defs",
+      {},
+      svgEl(
+        "linearGradient",
+        { id: `${id}-g`, x1: "10", y1: "8", x2: "58", y2: "68", gradientUnits: "userSpaceOnUse" },
+        svgEl("stop", { offset: "0", "stop-color": "#a9c2ff" }),
+        svgEl("stop", { offset: "0.45", "stop-color": "#8b8dff" }),
+        svgEl("stop", { offset: "1", "stop-color": "#c77bff" }),
+      ),
+      svgEl(
+        "radialGradient",
+        { id: `${id}-hl`, cx: "0.34", cy: "0.22", r: "0.55" },
+        svgEl("stop", { offset: "0", "stop-color": "rgba(255,255,255,0.75)" }),
+        svgEl("stop", { offset: "1", "stop-color": "rgba(255,255,255,0)" }),
+      ),
+    ),
+    svgEl("path", { d: SPECTER_BODY, fill: `url(#${id}-g)` }),
+    svgEl("path", { d: SPECTER_BODY, fill: `url(#${id}-hl)`, opacity: "0.7" }),
+    svgEl(
+      "g",
+      { className: "specter-eyes" },
+      svgEl("ellipse", { cx: "25", cy: "31", rx: "2.7", ry: "4.3", fill: "#07101f" }),
+      svgEl("ellipse", { cx: "41", cy: "31", rx: "2.7", ry: "4.3", fill: "#07101f" }),
+    ),
+    svgEl("path", { d: "M29 41.5c2.3 2.2 5.7 2.2 8 0", stroke: "rgba(7,16,31,0.72)", "stroke-width": "1.8", "stroke-linecap": "round" }),
+    svgEl("ellipse", { cx: "18", cy: "38", rx: "3.4", ry: "2", fill: "rgba(255,140,210,0.28)" }),
+    svgEl("ellipse", { cx: "48", cy: "38", rx: "3.4", ry: "2", fill: "rgba(255,140,210,0.28)" }),
+  );
+}
+
+function instruments(initialCount: number): HTMLElement {
+  const r = currentRegion();
+  const countLabel = `${initialCount} ${initialCount === 1 ? "caractere" : "caracteres"} · só neste aparelho`;
+  return h(
+    "aside",
+    { className: "desk-side", "aria-label": "Instrumentos locais" },
+    h(
+      "div",
+      { className: "instrument", "data-reveal": "" },
+      h(
+        "header",
+        { className: "instrument-head" },
+        h("span", { className: "instrument-icon" }, icon("key")),
+        h("div", {}, h("strong", {}, "Teclado local"), h("span", {}, "cada tecla é processada aqui")),
+        h("span", { className: "instrument-tag" }, "local"),
+      ),
+      h("canvas", { className: "keyboard-field", "aria-hidden": "true" }),
+      h("div", { className: "instrument-foot" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), h("span", { className: "keyboard-count" }, countLabel)),
+    ),
+    h(
+      "div",
+      { className: "instrument", "data-reveal": "" },
+      h(
+        "header",
+        { className: "instrument-head" },
+        h("span", { className: "instrument-icon" }, icon("pin")),
+        h("div", {}, h("strong", {}, "Região do relato"), h("span", {}, "contexto, não identidade")),
+        h("span", { className: "instrument-tag accent" }, "pin"),
+      ),
+      h("canvas", {
+        className: "region-field",
+        "data-lat": String(r.lat),
+        "data-lon": String(r.lon),
+        "aria-hidden": "true",
+      }),
+      h(
+        "div",
+        { className: "region-meta" },
+        h("div", {}, h("strong", { className: "region-name" }, `${regionCountry} · ${regionCity}`), h("span", { className: "region-coords" }, `${r.lat.toFixed(2)}°, ${r.lon.toFixed(2)}°`)),
+        h("span", { className: "region-note" }, "ponto arredondado"),
+      ),
+    ),
+    h(
+      "div",
+      { className: "instrument instrument-mini", "data-reveal": "" },
+      h("div", { className: "mini-row" }, icon("lock"), h("span", {}, "0 bytes saíram deste aparelho")),
+      h("div", { className: "mini-row" }, icon("eyeOff"), h("span", {}, "Nenhum IP registrado")),
+      h("div", { className: "mini-row" }, icon("key"), h("span", {}, "Chave de leitura só no recibo")),
+    ),
+  );
+}
+
+function receiptLinks(): HTMLElement {
+  return h(
+    "section",
+    { className: "receipt-links", "data-reveal": "" },
+    h(
+      "div",
+      { className: "receipt-links-copy" },
+      h("span", { className: "eyebrow" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "Já denunciou?"),
+      h("h2", {}, "Seu recibo abre a conversa."),
+      h("p", { className: "muted" }, "Respostas e verificação usam apenas o arquivo que está com você. Nós não guardamos uma cópia."),
+    ),
+    h(
+      "div",
+      { className: "receipt-links-actions" },
+      h("a", { className: "btn ghost", href: "#/respostas" }, icon("key"), "Abrir respostas"),
+      h("a", { className: "btn ghost", href: "#/verificar" }, icon("shield"), "Verificar documento"),
+    ),
   );
 }
 
@@ -173,10 +331,6 @@ function ambient(): HTMLElement {
   );
 }
 
-function logoRow(): HTMLElement {
-  return h("div", { className: "brand" }, logoMark(), h("span", {}, "Blind Report"));
-}
-
 function stepper(step: SourceState["step"]): HTMLElement {
   const index = STEP_ORDER.indexOf(step);
   return h(
@@ -213,7 +367,9 @@ function panelMeta(text: string): HTMLElement {
 async function start() {
   const root = document.getElementById("app")!;
   document.body.prepend(ambient());
-  let tab: Tab = "enviar";
+  let route: Route = parseRoute();
+  let pendingFocus = false;
+  let tab: Tab = route === "respostas" ? "respostas" : route === "verificar" ? "verificar" : "enviar";
   let lastCategory = "corrupção";
   let draftText = "";
   let draftCategory = "";
@@ -259,6 +415,32 @@ async function start() {
         draftText = text.value;
       });
       const file = h("input", { type: "file", id: "file" }) as HTMLInputElement;
+
+      if (!REGIONS[regionCountry]?.[regionCity]) {
+        regionCountry = "Brasil";
+        regionCity = "São Paulo";
+      }
+      const country = h("select", { id: "reg-country" }, ...Object.keys(REGIONS).map((c) => h("option", { value: c }, c))) as HTMLSelectElement;
+      country.value = regionCountry;
+      const cityOf = (name: string) => Object.keys(REGIONS[name] ?? REGIONS.Brasil);
+      const city = h("select", { id: "reg-city" }, ...cityOf(regionCountry).map((c) => h("option", { value: c }, c))) as HTMLSelectElement;
+      city.value = regionCity;
+      const emitRegion = () => {
+        const place = currentRegion();
+        window.dispatchEvent(new CustomEvent("br:region", { detail: { country: regionCountry, city: regionCity, lat: place.lat, lon: place.lon } }));
+      };
+      country.addEventListener("change", () => {
+        regionCountry = country.value;
+        const cities = cityOf(regionCountry);
+        if (!cities.includes(regionCity)) regionCity = cities[0];
+        city.replaceChildren(...cities.map((c) => h("option", { value: c }, c)));
+        city.value = regionCity;
+        emitRegion();
+      });
+      city.addEventListener("change", () => {
+        regionCity = city.value;
+        emitRegion();
+      });
       return h(
         "section",
         { className: "panel" },
@@ -269,6 +451,18 @@ async function start() {
         err(s),
         field("Categoria", "cat", cat),
         field("Texto", "txt", text),
+        h(
+          "div",
+          { className: "region-fields" },
+          h(
+            "div",
+            { className: "region-fields-head" },
+            h("span", { className: "region-fields-title" }, icon("pin"), "Onde acontece?"),
+            h("span", { className: "region-optional" }, "opcional"),
+          ),
+          h("div", { className: "region-selects" }, field("País", "reg-country", country), field("Cidade", "reg-city", city)),
+          h("p", { className: "hint region-hint-inline" }, icon("shield"), h("span", {}, "O ponto no mapa é arredondado e não identifica endereço. Serve só para dar contexto.")),
+        ),
         n.attachments ? field("Anexo (opcional)", "file", file) : null,
         h("p", { className: "hint" }, icon("lock"), h("span", {}, "Seu texto é cifrado neste aparelho antes de sair. Só a redação consegue abri-lo.")),
         h(
@@ -638,12 +832,12 @@ async function start() {
             "div",
             { className: "hero-actions", "data-reveal": "" },
             h(
-              "button",
+              "a",
               {
                 className: "btn primary lg",
+                href: routeHref("denunciar"),
                 onclick: () => {
-                  scrollToId("enviar-denuncia");
-                  setTimeout(() => document.querySelector<HTMLInputElement>("#nr")?.focus({ preventScroll: true }), 620);
+                  pendingFocus = true;
                 },
               },
               "Enviar uma denúncia",
@@ -918,8 +1112,8 @@ async function start() {
           "div",
           { className: "creed-actions", "data-reveal": "" },
           h(
-            "button",
-            { className: "btn primary xl", onclick: () => scrollToId("enviar-denuncia") },
+            "a",
+            { className: "btn primary xl", href: routeHref("denunciar") },
             "Enviar uma denúncia",
             h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→"),
           ),
@@ -929,37 +1123,283 @@ async function start() {
     );
   }
 
-  function flowSection(body: Node, landing: boolean): HTMLElement {
-    if (!landing) {
-      return h("section", { className: "flow flow-compact", id: "enviar-denuncia" }, body);
-    }
+  function securityTeaser(): HTMLElement {
+    const layers: { icon: IconName; name: string; detail: string; status: string }[] = [
+      { icon: "lock", name: "Libsodium", detail: "cifra no seu aparelho", status: "local" },
+      { icon: "eyeOff", name: "Rede restrita", detail: "nenhuma chamada externa", status: "fechada" },
+      { icon: "fingerprint", name: "World ID", detail: "humano sem identidade", status: "anônima" },
+      { icon: "cube", name: "Arkiv", detail: "custódia imutável", status: "pública" },
+    ];
     return h(
       "section",
-      { className: "flow", id: "enviar-denuncia", "data-chapter": "enviar-denuncia" },
+      { className: "teaser", id: "por-dentro", "data-chapter": "arquitetura" },
       h(
         "div",
-        { className: "flow-shell" },
+        { className: "teaser-copy", "data-reveal": "" },
+        h("span", { className: "chapter-eyebrow" }, h("span", {}, "03"), "Por dentro"),
+        h("h2", {}, "Quatro camadas.", h("br"), h("span", { className: "grad" }, "Nenhum atalho.")),
+        h(
+          "p",
+          { className: "muted" },
+          "Cada proteção existe por um motivo concreto — e pode ser auditada. O caminho entre você e a redação não passa por uma caixa-preta.",
+        ),
+        h("a", { className: "btn ghost", href: routeHref("seguranca") }, "Explorar a arquitetura", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
+      ),
+      h(
+        "div",
+        { className: "layer-stack", "data-reveal": "" },
+        h(
+          "header",
+          { className: "layer-head" },
+          h("span", { className: "console-dots", "aria-hidden": "true" }, h("i"), h("i"), h("i")),
+          h("span", { className: "layer-head-title" }, "sistema blind report"),
+          h("span", { className: "layer-head-status" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "4 camadas ativas"),
+        ),
+        ...layers.map((layer, i) =>
+          h(
+            "div",
+            { className: "layer-row" },
+            h("span", { className: "layer-index" }, String(i + 1).padStart(2, "0")),
+            h("span", { className: "layer-icon" }, icon(layer.icon)),
+            h("div", { className: "layer-info" }, h("strong", {}, layer.name), h("span", {}, layer.detail)),
+            h("span", { className: "layer-status" }, layer.status),
+          ),
+        ),
+      ),
+    );
+  }
+
+  function securityChapterNav(): HTMLElement {
+    const chapters: [string, string, string][] = [
+      ["inicio", "Abertura", "seguranca-top"],
+      ["arquitetura", "Camadas", "arquitetura"],
+      ["manifesto", "Arkiv", "arkiv"],
+      ["processo", "Rastro", "rastro"],
+      ["compromisso", "Pronto", "cta-pronto"],
+    ];
+    return h(
+      "aside",
+      { className: "chapter-nav", "aria-label": "Seções de segurança" },
+      ...chapters.map(([id, label, target]) =>
+        h(
+          "button",
+          { className: "chapter-link", "data-chapter-link": id, "aria-label": label, onclick: () => scrollToId(target) },
+          h("span", { className: "chapter-dot", "aria-hidden": "true" }),
+          h("span", { className: "chapter-label" }, label),
+        ),
+      ),
+    );
+  }
+
+  function securityHero(): HTMLElement {
+    return h(
+      "section",
+      { className: "sec-hero", id: "seguranca-top", "data-chapter": "inicio" },
+      h(
+        "div",
+        { className: "sec-hero-copy" },
+        h("span", { className: "eyebrow", "data-reveal": "" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "Segurança · por dentro"),
+        h("h1", { "data-reveal": "" }, "O rastro termina", h("br"), h("span", { className: "grad" }, "no seu aparelho.")),
+        h(
+          "p",
+          { className: "lede", "data-reveal": "" },
+          "Nenhum tracker, analytics ou identificador. Quatro camadas independentes cuidam do caminho entre você e a redação — e cada uma pode ser auditada.",
+        ),
         h(
           "div",
-          { className: "flow-intro", "data-reveal": "" },
-          h("span", { className: "eyebrow" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "Comece aqui"),
-          h("h2", {}, "Comece pela", h("br"), h("span", { className: "grad" }, "redação certa.")),
-          h(
-            "p",
-            { className: "lede" },
-            "Confirme o nome ENS da redação, escreva o que sabe e receba um recibo. O resto do caminho é criptografia.",
-          ),
-          h(
-            "ul",
-            { className: "flow-points" },
-            h("li", {}, icon("check"), "Sem e-mail, telefone ou cadastro."),
-            h("li", {}, icon("check"), "O texto é cifrado antes de sair do aparelho."),
-            h("li", {}, icon("check"), "A redação nunca vê seu IP nem sua identidade."),
-            h("li", {}, icon("check"), "O recibo é a única cópia da chave de leitura."),
-          ),
-          h("div", { className: "flow-footnote" }, icon("lock"), "Demonstração com backend simulado em memória"),
+          { className: "hero-actions", "data-reveal": "" },
+          h("button", { className: "btn primary lg", onclick: () => scrollToId("arquitetura") }, "Ver as camadas", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
+          h("a", { className: "btn ghost lg", href: routeHref("denunciar") }, "Testar o canal"),
         ),
-        h("div", { className: "flow-body" }, body),
+        h(
+          "ul",
+          { className: "hero-assurance", "data-reveal": "" },
+          h("li", {}, h("span", { className: "assurance-icon" }, icon("eyeOff")), "Sem trackers"),
+          h("li", {}, h("span", { className: "assurance-icon" }, icon("shield")), "Sem analytics"),
+          h("li", {}, h("span", { className: "assurance-icon" }, icon("key")), "Sem IP"),
+        ),
+      ),
+      h(
+        "div",
+        { className: "sec-art", "aria-hidden": "true" },
+        h("span", { className: "mesh-blob mesh-a" }),
+        h("span", { className: "mesh-blob mesh-b" }),
+        h("span", { className: "mesh-blob mesh-c" }),
+        h(
+          "div",
+          { className: "specter-stage" },
+          h("span", { className: "specter-orbit specter-orbit-a" }),
+          h("span", { className: "specter-orbit specter-orbit-b" }),
+          h("span", { className: "specter-orbit specter-orbit-c" }),
+          specter("specter specter-hero"),
+          h("span", { className: "specter-chip specter-chip-a" }, "sem identidade"),
+          h("span", { className: "specter-chip specter-chip-b" }, "sem IP"),
+          h("span", { className: "specter-chip specter-chip-c" }, "sem rastro"),
+        ),
+      ),
+    );
+  }
+
+  function latticeSection(): HTMLElement {
+    const points = ["Trilha pública e auditável", "Sem metadados da fonte", "Verificação por hash"];
+    return h(
+      "section",
+      { className: "lattice", id: "arkiv", "data-chapter": "manifesto" },
+      h(
+        "div",
+        { className: "lattice-visual", "data-reveal": "" },
+        h("canvas", { className: "lattice-field", "aria-hidden": "true" }),
+        h(
+          "div",
+          { className: "lattice-hud" },
+          h("span", { className: "lattice-tag" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "arkiv · rede pública"),
+          h("code", {}, "bloco 8.765.432"),
+        ),
+        h("span", { className: "lattice-caption" }, "cada nó é uma entrada imutável"),
+      ),
+      h(
+        "div",
+        { className: "lattice-copy" },
+        h("span", { className: "chapter-eyebrow", "data-reveal": "" }, h("span", {}, "04"), "Arkiv"),
+        h("h2", { "data-reveal": "" }, "Um registro que ninguém ", h("span", { className: "grad" }, "reescreve.")),
+        h(
+          "p",
+          { "data-reveal": "" },
+          "Cada envelope vira uma entrada imutável no Arkiv. A custódia é transferida para a redação com prova pública — sem expor quem enviou.",
+        ),
+        h(
+          "ul",
+          { className: "lattice-points", "data-reveal": "" },
+          ...points.map((point) => h("li", {}, icon("check"), point)),
+        ),
+        h(
+          "div",
+          { className: "lattice-stats", "data-reveal": "" },
+          h("div", {}, h("strong", {}, "∞"), h("span", {}, "histórico preservado")),
+          h("div", {}, h("strong", {}, "0"), h("span", {}, "metadados da fonte")),
+        ),
+      ),
+    );
+  }
+
+  function blockedNetwork(): SVGElement {
+    const cx = 190;
+    const cy = 150;
+    const R = 112;
+    const items = ["analytics", "tracker", "CDN", "ads", "telemetria", "fontes"];
+    const children: (SVGElement | string)[] = [];
+    items.forEach((label, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 3;
+      const x = cx + Math.cos(a) * R;
+      const y = cy + Math.sin(a) * R * 0.82;
+      const mx = cx + Math.cos(a) * R * 0.56;
+      const my = cy + Math.sin(a) * R * 0.46;
+      children.push(svgEl("line", { x1: String(cx), y1: String(cy), x2: String(x), y2: String(y), stroke: "rgba(150, 175, 255, 0.16)", "stroke-width": "1", "stroke-dasharray": "3 7" }));
+      children.push(svgEl("path", { d: `M${mx - 5} ${my - 5} L${mx + 5} ${my + 5} M${mx + 5} ${my - 5} L${mx - 5} ${my + 5}`, stroke: "rgba(255, 120, 150, 0.7)", "stroke-width": "1.5", "stroke-linecap": "round" }));
+      children.push(svgEl("circle", { cx: String(x), cy: String(y), r: "16", className: "net-node", fill: "rgba(255, 255, 255, 0.025)", stroke: "rgba(150, 175, 255, 0.22)" }));
+      children.push(svgEl("text", { x: String(x), y: String(y + 33), "text-anchor": "middle", className: "net-label" }, label));
+    });
+    children.push(svgEl("circle", { cx: String(cx), cy: String(cy), r: "36", className: "net-core", fill: "rgba(122, 162, 255, 0.09)", stroke: "rgba(150, 180, 255, 0.38)" }));
+    children.push(svgEl("circle", { cx: String(cx), cy: String(cy), r: "48", fill: "none", stroke: "rgba(150, 180, 255, 0.12)", "stroke-dasharray": "2 6" }));
+    children.push(svgEl("text", { x: String(cx), y: String(cy + 4), "text-anchor": "middle", className: "net-core-label" }, "você"));
+    return svgEl("svg", { className: "blocked-net", viewBox: "0 0 380 300", "aria-hidden": "true" }, ...children);
+  }
+
+  function noTraceSection(): HTMLElement {
+    const blocked = ["Analytics · bloqueado", "Trackers · bloqueados", "Fontes e pixels externos · bloqueados", "Cookies · nenhum"];
+    return h(
+      "section",
+      { className: "no-trace", id: "rastro", "data-chapter": "processo" },
+      h(
+        "div",
+        { className: "no-trace-copy" },
+        h("span", { className: "chapter-eyebrow", "data-reveal": "" }, h("span", {}, "05"), "Sem rastro"),
+        h("h2", { "data-reveal": "" }, "A rede não sabe ", h("span", { className: "grad" }, "quem você é.")),
+        h(
+          "p",
+          { "data-reveal": "" },
+          "Política de rede fechada: nenhuma chamada externa, nenhum pixel de rastreamento, nenhum identificador. O único vestígio é um fantasma.",
+        ),
+        h(
+          "ul",
+          { className: "blocked-list", "data-reveal": "" },
+          ...blocked.map((item) => h("li", {}, h("span", { className: "blocked-x", "aria-hidden": "true" }, "✕"), item)),
+        ),
+        h("p", { className: "no-trace-note", "data-reveal": "" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "0 chamadas externas nesta sessão"),
+      ),
+      h("div", { className: "no-trace-art", "data-reveal": "" }, blockedNetwork()),
+    );
+  }
+
+  function securityCta(): HTMLElement {
+    return h(
+      "section",
+      { className: "cta-band", id: "cta-pronto", "data-chapter": "compromisso" },
+      h("span", { className: "cta-band-glow", "aria-hidden": "true" }),
+      h("span", { className: "eyebrow", "data-reveal": "" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "Pronto para falar"),
+      h("h2", { "data-reveal": "" }, "A sua história não precisa de ", h("span", { className: "grad" }, "coragem extra.")),
+      h("p", { className: "muted", "data-reveal": "" }, "Só precisa de um canal que não entregue você junto."),
+      h(
+        "div",
+        { className: "cta-band-actions", "data-reveal": "" },
+        h("a", { className: "btn primary xl", href: routeHref("denunciar") }, "Enviar uma denúncia", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
+        h("a", { className: "btn ghost xl", href: routeHref("inicio") }, "Voltar ao início"),
+      ),
+    );
+  }
+
+  function denunciaHero(s: SourceState): HTMLElement {
+    const copy =
+      s.step === "compose"
+        ? { eyebrow: "Passo 2 · Relato", lead: "Escreva.", accent: "Nós ciframos." , lede: "O texto é cifrado neste aparelho antes de sair. Use o teclado ao lado para acompanhar: cada tecla fica aqui." }
+        : s.step === "proof"
+          ? { eyebrow: "Passo 3 · Humanidade", lead: "Prove sem se", accent: "identificar.", lede: "A prova de humanidade impede spam sem revelar quem você é." }
+          : s.step === "receipt"
+            ? { eyebrow: "Passo 4 · Recibo", lead: "O recibo é", accent: "só seu.", lede: "Guarde-o. Ele é a chave para respostas, autoria e verificação." }
+            : { eyebrow: "Canal seguro · 4 passos", lead: "Comece pela", accent: "redação certa.", lede: "Escolha para quem falar, escreva o que sabe e receba um recibo. O resto do caminho é criptografia." };
+    return h(
+      "section",
+      { className: "page-hero", "data-chapter": "inicio" },
+      h(
+        "div",
+        { className: "page-hero-copy" },
+        h("span", { className: "eyebrow", "data-reveal": "" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), copy.eyebrow),
+        h("h1", { "data-reveal": "" }, copy.lead, " ", h("span", { className: "grad" }, copy.accent)),
+        h("p", { className: "lede", "data-reveal": "" }, copy.lede),
+        h(
+          "ul",
+          { className: "hero-assurance compact", "data-reveal": "" },
+          h("li", {}, h("span", { className: "assurance-icon" }, icon("shield")), "Sem cadastro"),
+          h("li", {}, h("span", { className: "assurance-icon" }, icon("eyeOff")), "Sem IP"),
+          h("li", {}, h("span", { className: "assurance-icon" }, icon("key")), "Recibo local"),
+        ),
+      ),
+      h(
+        "div",
+        { className: "page-hero-art", "aria-hidden": "true" },
+        h(
+          "div",
+          { className: "specter-stage mini" },
+          h("span", { className: "specter-orbit specter-orbit-b" }),
+          h("span", { className: "specter-orbit specter-orbit-c" }),
+          specter("specter specter-mini"),
+        ),
+        h("span", { className: "field-badge" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "sessão anônima ativa"),
+      ),
+    );
+  }
+
+  function reportSubnav(current: Route): HTMLElement {
+    const items: [Route, string, IconName][] = [
+      ["denunciar", "Denunciar", "lock"],
+      ["respostas", "Respostas", "key"],
+      ["verificar", "Verificar", "shield"],
+    ];
+    return h(
+      "nav",
+      { className: "report-subnav", "aria-label": "Fluxo da fonte" },
+      ...items.map(([id, label, ic]) =>
+        h("a", { className: id === current ? "report-subnav-link is-active" : "report-subnav-link", href: routeHref(id), "aria-current": id === current ? "page" : undefined }, icon(ic), label),
       ),
     );
   }
@@ -978,7 +1418,7 @@ async function start() {
         h(
           "article",
           { className: `flow-node ${node.cls}` },
-          h("span", { className: "flow-icon", "aria-hidden": "true" }, icon(node.icon)),
+          h("span", { className: "flow-icon", "aria-hidden": "true" }, node.label === "Você" ? specter("flow-specter") : icon(node.icon)),
           h("strong", {}, node.label),
           h("small", {}, node.sub),
         ),
@@ -1007,14 +1447,6 @@ async function start() {
     );
   }
 
-  function scrollCue(): HTMLElement {
-    return h(
-      "button",
-      { className: "scroll-cue", "aria-label": "Ir para o formulário", onclick: () => document.querySelector(".panel")?.scrollIntoView({ behavior: "smooth", block: "center" }) },
-      h("span", { className: "scroll-cue-arrow", "aria-hidden": "true" }, "↓"),
-    );
-  }
-
   function protocols(): HTMLElement {
     const items = ["ENSv2", "Arkiv", "World ID", "Libsodium"];
     return h(
@@ -1030,57 +1462,22 @@ async function start() {
   }
 
   function chapterNav(): HTMLElement {
-    const chapters: [string, string][] = [
-      ["inicio", "Início"],
-      ["manifesto", "Manifesto"],
-      ["processo", "O caminho"],
-      ["arquitetura", "Arquitetura"],
-      ["compromisso", "Compromisso"],
-      ["enviar-denuncia", "Denunciar"],
+    const chapters: [string, string, string][] = [
+      ["inicio", "Início", "inicio"],
+      ["manifesto", "Manifesto", "manifesto"],
+      ["processo", "O caminho", "processo"],
+      ["arquitetura", "Arquitetura", "por-dentro"],
+      ["compromisso", "Compromisso", "compromisso"],
     ];
     return h(
       "aside",
       { className: "chapter-nav", "aria-label": "Navegação pelas seções" },
-      ...chapters.map(([id, label]) =>
+      ...chapters.map(([id, label, target]) =>
         h(
           "button",
-          { className: "chapter-link", "data-chapter-link": id, "aria-label": label, onclick: () => scrollToId(id) },
+          { className: "chapter-link", "data-chapter-link": id, "aria-label": label, onclick: () => scrollToId(target) },
           h("span", { className: "chapter-dot", "aria-hidden": "true" }),
           h("span", { className: "chapter-label" }, label),
-        ),
-      ),
-    );
-  }
-
-  function features(): HTMLElement {
-    const cards = [
-      { icon: "lock" as IconName, num: "01", title: "Criptografia de ponta a ponta", text: "O relato é selado com a chave pública da redação no seu aparelho. Nem o servidor de envio consegue ler.", tag: "Libsodium" },
-      { icon: "eyeOff" as IconName, num: "02", title: "Anonimato por padrão", text: "Sem registro de IP, sem trackers e sem chamadas externas escondidas. A rede é restrita por política.", tag: "Rede restrita" },
-      { icon: "fingerprint" as IconName, num: "03", title: "Prova de humanidade", text: "World ID bloqueia spam e ataques sem revelar quem você é: uma denúncia por pessoa, por época e por redação.", tag: "World ID" },
-      { icon: "cube" as IconName, num: "04", title: "Custódia imutável", text: "A denúncia é registrada no Arkiv e a custódia é transferida para a redação — com trilha verificável.", tag: "Arkiv" },
-    ];
-    return h(
-      "section",
-      { className: "features", id: "como-funciona" },
-      h(
-        "header",
-        { className: "section-head" },
-        h("span", { className: "eyebrow" }, h("span", { className: "eyebrow-dot", "aria-hidden": "true" }), "Como funciona"),
-        h("h2", {}, "Segurança não é promessa. É arquitetura."),
-        h("p", { className: "muted" }, "Quatro camadas independentes protegem a fonte e garantem que a redação receba exatamente o que foi enviado."),
-      ),
-      h(
-        "div",
-        { className: "feature-grid" },
-        ...cards.map((card) =>
-          h(
-            "article",
-            { className: "feature-card" },
-            h("div", { className: "feature-top" }, h("span", { className: "feature-icon" }, icon(card.icon)), h("span", { className: "feature-num" }, card.num)),
-            h("h3", {}, card.title),
-            h("p", {}, card.text),
-            h("span", { className: "feature-tag" }, card.tag),
-          ),
         ),
       ),
     );
@@ -1100,6 +1497,17 @@ async function start() {
           h("div", {}, h("strong", {}, "Blind Report"), h("span", {}, "Luz sobre as notícias que ninguém vê")),
         ),
         h(
+          "nav",
+          { className: "footer-nav", "aria-label": "Mapa do site" },
+          ...[
+            ["inicio", "Início"],
+            ["seguranca", "Segurança"],
+            ["denunciar", "Denunciar"],
+            ["respostas", "Respostas"],
+            ["verificar", "Verificar"],
+          ].map(([id, label]) => h("a", { href: routeHref(id as Route) }, label)),
+        ),
+        h(
           "div",
           { className: "footer-icons" },
           h("span", { className: "icon-badge", title: "Criptografia de ponta a ponta" }, icon("lock")),
@@ -1117,39 +1525,52 @@ async function start() {
     );
   }
 
-  let lastView = "";
-  let disposeLanding: (() => void) | null = null;
-  function render(s: SourceState) {
-    const landing = tab === "enviar" && s.step === "newsroom";
-    document.body.dataset.mode = tab;
-    document.body.dataset.step = s.step;
+  const TITLES: Record<Route, string> = {
+    inicio: "Blind Report — fale sem deixar rastro",
+    seguranca: "Segurança por dentro — Blind Report",
+    denunciar: "Enviar denúncia — Blind Report",
+    respostas: "Respostas — Blind Report",
+    verificar: "Verificar documento — Blind Report",
+  };
 
-    const tabs: [Tab, string][] = [
-      ["enviar", "Enviar"],
+  function focusDesk() {
+    const desk = document.getElementById("enviar-denuncia");
+    desk?.scrollIntoView({ behavior: "smooth", block: "start" });
+    requestAnimationFrame(() => {
+      const input = (document.getElementById("nr") ?? document.getElementById("txt")) as HTMLElement | null;
+      input?.focus({ preventScroll: true });
+    });
+  }
+
+  function topbar(): HTMLElement {
+    const tabs: [Route, string][] = [
+      ["inicio", "Início"],
+      ["seguranca", "Segurança"],
       ["respostas", "Respostas"],
       ["verificar", "Verificar"],
     ];
-    const header = h(
+    return h(
       "header",
       { className: "topbar" },
       h(
         "div",
         { className: "nav-shell" },
-        logoRow(),
+        h(
+          "a",
+          { className: "brand", href: routeHref("inicio"), "aria-label": "Blind Report — página inicial" },
+          logoMark(),
+          h("span", {}, "Blind Report"),
+        ),
         h(
           "nav",
           { className: "nav-tabs", "aria-label": "Seções" },
           ...tabs.map(([id, label]) =>
             h(
-              "button",
+              "a",
               {
-                className: "nav-tab",
-                "aria-current": tab === id ? "page" : undefined,
-                onclick: () => {
-                  tab = id;
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                  render(controller.state);
-                },
+                className: route === id ? "nav-tab is-active" : "nav-tab",
+                href: routeHref(id),
+                "aria-current": route === id ? "page" : undefined,
               },
               label,
             ),
@@ -1159,16 +1580,17 @@ async function start() {
           "div",
           { className: "nav-actions" },
           h(
-            "button",
+            "a",
             {
               className: "nav-cta",
-              onclick: () => {
-                if (tab !== "enviar") {
-                  tab = "enviar";
-                  render(controller.state);
-                  requestAnimationFrame(() => scrollToId("enviar-denuncia"));
+              href: routeHref("denunciar"),
+              "aria-current": route === "denunciar" ? "page" : undefined,
+              onclick: (event: Event) => {
+                if (route === "denunciar") {
+                  event.preventDefault();
+                  focusDesk();
                 } else {
-                  scrollToId("enviar-denuncia");
+                  pendingFocus = true;
                 }
               },
             },
@@ -1178,43 +1600,117 @@ async function start() {
         ),
       ),
     );
-    const body = tab === "enviar" ? viewSend(s) : tab === "respostas" ? viewReplies(s) : viewVerify(s);
+  }
+
+  let lastView = "";
+  let disposeScrolly: (() => void) | null = null;
+  function render(s: SourceState) {
+    document.body.dataset.mode = route;
+    document.body.dataset.step = s.step;
+    document.documentElement.dataset.route = route;
+    document.title = TITLES[route];
+
+    let main: HTMLElement;
+    if (route === "inicio") {
+      main = h(
+        "main",
+        { id: "conteudo" },
+        heroLanding(),
+        manifesto(),
+        processSection(),
+        securityTeaser(),
+        creed(),
+      );
+    } else if (route === "seguranca") {
+      main = h(
+        "main",
+        { id: "conteudo" },
+        securityHero(),
+        architecture(),
+        latticeSection(),
+        noTraceSection(),
+        securityCta(),
+      );
+    } else if (route === "denunciar") {
+      const body = viewSend(s);
+      const active = s.step === "newsroom" || s.step === "compose";
+      const stage = active
+        ? h(
+            "div",
+            { className: "desk" },
+            h("div", { className: "desk-main", "data-reveal": "" }, body),
+            instruments(draftText.length),
+          )
+        : h("div", { className: "desk desk-single" }, h("div", { className: "desk-main" }, body));
+      main = h(
+        "main",
+        { id: "conteudo" },
+        denunciaHero(s),
+        h(
+          "div",
+          { className: "denuncia-wrap" },
+          reportSubnav("denunciar"),
+          h("section", { className: "denuncia-stage", id: "enviar-denuncia" }, stage),
+        ),
+        receiptLinks(),
+      );
+    } else {
+      const body = route === "respostas" ? viewReplies(s) : viewVerify(s);
+      main = h(
+        "main",
+        { id: "conteudo" },
+        hero(heroFor(s)),
+        h(
+          "div",
+          { className: "denuncia-wrap is-center" },
+          reportSubnav(route),
+          h("div", { className: "flow flow-compact", id: "enviar-denuncia" }, body),
+        ),
+      );
+    }
+
     const content = h(
       "div",
       { className: "page" },
       h("a", { className: "skip", href: "#conteudo" }, "Ir para o conteúdo"),
-      landing ? scrollProgress() : null,
-      header,
-      landing ? chapterNav() : null,
-      h(
-        "main",
-        { id: "conteudo" },
-        landing ? heroLanding() : hero(heroFor(s)),
-        landing ? manifesto() : null,
-        landing ? processSection() : null,
-        landing ? architecture() : null,
-        landing ? creed() : null,
-        flowSection(body, landing),
-      ),
+      route === "inicio" || route === "seguranca" ? scrollProgress() : null,
+      topbar(),
+      route === "inicio" ? chapterNav() : route === "seguranca" ? securityChapterNav() : null,
+      main,
       footer(),
     );
 
     const previous = lastView;
-    const key = `${tab}:${s.step}`;
+    const previousRoute = previous.split(":")[0];
+    const key = `${route}:${s.step}`;
     const changed = key !== lastView;
     if (changed) content.dataset.enter = "";
     lastView = key;
 
-    disposeLanding?.();
-    disposeLanding = null;
+    disposeScrolly?.();
+    disposeScrolly = null;
     root.replaceChildren(content);
-    if (landing) disposeLanding = setupScrolly(root);
+    disposeScrolly = setupScrolly(root);
 
-    if (changed && previous) {
-      if (tab === "enviar" && s.step !== "newsroom") window.scrollTo({ top: 0, behavior: "auto" });
-      else if (landing && previous.startsWith("enviar:")) window.scrollTo({ top: 0, behavior: "auto" });
+    if (pendingFocus) {
+      pendingFocus = false;
+      requestAnimationFrame(focusDesk);
+    } else if (changed && previous) {
+      if (route === previousRoute && route === "denunciar") {
+        requestAnimationFrame(() => document.getElementById("enviar-denuncia")?.scrollIntoView({ behavior: "auto", block: "start" }));
+      } else {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
     }
   }
+
+  window.addEventListener("hashchange", () => {
+    const next = parseRoute();
+    if (next === route) return;
+    route = next;
+    tab = route === "respostas" ? "respostas" : route === "verificar" ? "verificar" : "enviar";
+    render(controller.state);
+  });
 
   controller.subscribe(render);
   render(controller.state);

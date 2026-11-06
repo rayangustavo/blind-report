@@ -434,6 +434,45 @@ export function setupScrolly(root: HTMLElement): () => void {
     cleanups.push(field.destroy);
   }
 
+  const latticeCanvas = root.querySelector<HTMLCanvasElement>(".lattice-field");
+  if (latticeCanvas) {
+    const lattice = mountLattice(latticeCanvas);
+    cleanups.push(lattice.destroy);
+  }
+
+  const keyboardCanvas = root.querySelector<HTMLCanvasElement>(".keyboard-field");
+  if (keyboardCanvas) {
+    const keyboard = mountKeyboard(keyboardCanvas);
+    cleanups.push(keyboard.destroy);
+  }
+
+  const keyboardCount = root.querySelector<HTMLElement>(".keyboard-count");
+  const onInputCount = (e: Event) => {
+    const target = e.target as HTMLElement | null;
+    if (!keyboardCount || target?.id !== "txt") return;
+    const n = (target as HTMLTextAreaElement).value.length;
+    keyboardCount.textContent = `${n} ${n === 1 ? "caractere" : "caracteres"} · só neste aparelho`;
+  };
+  document.addEventListener("input", onInputCount);
+  cleanups.push(() => document.removeEventListener("input", onInputCount));
+
+  const globeCanvas = root.querySelector<HTMLCanvasElement>(".region-field");
+  if (globeCanvas) {
+    const globe = mountRegionGlobe(globeCanvas);
+    cleanups.push(globe.destroy);
+    const regionName = root.querySelector<HTMLElement>(".region-name");
+    const regionCoords = root.querySelector<HTMLElement>(".region-coords");
+    const onRegion = (e: Event) => {
+      const detail = (e as CustomEvent<{ lat: number; lon: number; country?: string; city?: string }>).detail;
+      if (!detail || typeof detail.lat !== "number" || typeof detail.lon !== "number") return;
+      globe.setLocation(detail.lat, detail.lon);
+      if (regionName && detail.country && detail.city) regionName.textContent = `${detail.country} · ${detail.city}`;
+      if (regionCoords) regionCoords.textContent = `${detail.lat.toFixed(2)}°, ${detail.lon.toFixed(2)}°`;
+    };
+    window.addEventListener("br:region", onRegion);
+    cleanups.push(() => window.removeEventListener("br:region", onRegion));
+  }
+
   const process = root.querySelector<HTMLElement>("#processo");
   const morphCanvas = root.querySelector<HTMLCanvasElement>(".morph-field");
   const morph = morphCanvas ? mountMorphField(morphCanvas) : null;
@@ -506,5 +545,590 @@ export function setupScrolly(root: HTMLElement): () => void {
   return () => {
     for (const fn of cleanups) fn();
     delete document.body.dataset.scene;
+  };
+}
+
+/* ---------- rede de grafeno (custódia Arkiv) ---------- */
+
+export function mountLattice(canvas: HTMLCanvasElement): { destroy: () => void } {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { destroy: () => {} };
+
+  const reduce = prefersReduced();
+  const R = 40;
+  const hStep = R * 1.5;
+  const vStep = Math.sqrt(3) * R;
+  const hexes: { x: number; y: number }[] = [];
+  for (let q = -4; q <= 4; q++) {
+    for (let r = -4; r <= 4; r++) {
+      if (Math.abs(q + r) > 4) continue;
+      hexes.push({ x: q * hStep, y: r * vStep + (Math.abs(q) % 2 === 1 ? vStep / 2 : 0) });
+    }
+  }
+  const nodes: { x: number; y: number; accent: boolean; hue: number }[] = [];
+  hexes.forEach((hex, hi) => {
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i;
+      nodes.push({ x: hex.x + Math.cos(a) * R, y: hex.y + Math.sin(a) * R, accent: (hi * 6 + i) % 31 === 0, hue: (hi + i) % 7 });
+    }
+  });
+  const packets = Array.from({ length: 10 }, (_, i) => ({
+    hex: (i * 13 + 7) % hexes.length,
+    edge: (i * 5 + 2) % 6,
+    speed: 0.07 + (i % 4) * 0.03,
+    phase: (i * 0.37) % 1,
+  }));
+
+  let width = 0;
+  let height = 0;
+  let raf = 0;
+  let mx = 0;
+  let my = 0;
+  let tx = 0;
+  let ty = 0;
+
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = rect.width;
+    height = rect.height;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+
+  const paint = (now: number) => {
+    if (!width || !height) return;
+    ctx.clearRect(0, 0, width, height);
+    mx += (tx - mx) * 0.05;
+    my += (ty - my) * 0.05;
+
+    const cx = width / 2;
+    const cy = height * 0.53;
+    const zoom = Math.min(width / 640, height / 470);
+    const yaw = 0.5 + (reduce ? 0 : now * 0.000075) + mx * 0.22;
+    const tilt = 1.0 + my * 0.08;
+    const f = 1250;
+    const cosY = Math.cos(yaw);
+    const sinY = Math.sin(yaw);
+    const cosT = Math.cos(tilt);
+    const sinT = Math.sin(tilt);
+
+    const project = (x: number, y: number) => {
+      const x1 = x * cosY;
+      const z1 = -x * sinY;
+      const y1 = y * cosT - z1 * sinT;
+      const z2 = y * sinT + z1 * cosT;
+      const s = f / (f + z2);
+      return { x: cx + x1 * s * zoom, y: cy + y1 * s * zoom, depth: clamp((z2 + 420) / 840) };
+    };
+
+    const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, width * 0.52);
+    halo.addColorStop(0, "rgba(122, 162, 255, 0.13)");
+    halo.addColorStop(0.5, "rgba(180, 107, 255, 0.055)");
+    halo.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, width, height);
+
+    for (const [hi, hex] of hexes.entries()) {
+      const pts = Array.from({ length: 6 }, (_, i) => {
+        const a = (Math.PI / 3) * i;
+        return project(hex.x + Math.cos(a) * R, hex.y + Math.sin(a) * R);
+      });
+      const depth = pts.reduce((sum, p) => sum + p.depth, 0) / pts.length;
+      const color = hi % 11 === 0 ? "56, 224, 200" : hi % 7 === 0 ? "180, 140, 255" : "150, 180, 255";
+      ctx.beginPath();
+      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.strokeStyle = `rgba(${color}, ${(0.055 + depth * 0.2).toFixed(3)})`;
+      ctx.lineWidth = 0.7 + depth * 0.75;
+      ctx.stroke();
+    }
+
+    if (!reduce) {
+      const sy = ((now * 0.028) % (height + 200)) - 100;
+      const scan = ctx.createLinearGradient(0, sy - 45, 0, sy + 45);
+      scan.addColorStop(0, "rgba(122, 162, 255, 0)");
+      scan.addColorStop(0.5, "rgba(150, 195, 255, 0.06)");
+      scan.addColorStop(1, "rgba(122, 162, 255, 0)");
+      ctx.fillStyle = scan;
+      ctx.fillRect(0, sy - 45, width, 90);
+    }
+
+    for (const node of nodes) {
+      const p = project(node.x, node.y);
+      const r = (node.accent ? 2.7 : 1.25) * (0.65 + p.depth * 1.1);
+      if (node.accent) {
+        ctx.save();
+        ctx.shadowColor = "rgba(56, 224, 200, 0.9)";
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, TAU);
+        ctx.fillStyle = `rgba(120, 240, 220, ${(0.35 + p.depth * 0.5).toFixed(3)})`;
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, TAU);
+        ctx.fillStyle = `rgba(170, 195, 255, ${(0.08 + p.depth * 0.42).toFixed(3)})`;
+        ctx.fill();
+      }
+    }
+
+    if (!reduce) {
+      for (const packet of packets) {
+        const hex = hexes[packet.hex];
+        const t = (now * 0.00008 * packet.speed * 60 + packet.phase) % 1;
+        const a0 = (Math.PI / 3) * packet.edge;
+        const a1 = (Math.PI / 3) * ((packet.edge + 1) % 6);
+        const x = hex.x + Math.cos(a0) * R + (Math.cos(a1) - Math.cos(a0)) * R * t;
+        const y = hex.y + Math.sin(a0) * R + (Math.sin(a1) - Math.sin(a0)) * R * t;
+        const p = project(x, y);
+        ctx.save();
+        ctx.shadowColor = "rgba(150, 190, 255, 0.9)";
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.9, 0, TAU);
+        ctx.fillStyle = `rgba(225, 238, 255, ${(0.25 + p.depth * 0.6).toFixed(3)})`;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  };
+
+  const onPointer = (e: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    tx = ((e.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2;
+    ty = ((e.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2;
+  };
+  const onLeave = () => {
+    tx = 0;
+    ty = 0;
+  };
+  const loop = (now: number) => {
+    paint(now);
+    raf = requestAnimationFrame(loop);
+  };
+
+  const ro = new ResizeObserver(() => {
+    resize();
+    if (reduce) paint(0);
+  });
+  ro.observe(canvas);
+  resize();
+  window.addEventListener("pointermove", onPointer, { passive: true });
+  window.addEventListener("pointerleave", onLeave);
+  if (reduce) paint(0);
+  else raf = requestAnimationFrame(loop);
+
+  return {
+    destroy() {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("pointerleave", onLeave);
+    },
+  };
+}
+
+/* ---------- teclado físico (só visual, processado no aparelho) ---------- */
+
+const KEY_ROWS = ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"];
+type KeyCap = { key: string; label: string; x: number; y: number; w: number; h: number; depth: number };
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+}
+
+export function mountKeyboard(canvas: HTMLCanvasElement): { destroy: () => void } {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { destroy: () => {} };
+
+  const reduce = prefersReduced();
+  let width = 0;
+  let height = 0;
+  let raf = 0;
+  let caps: KeyCap[] = [];
+  const pressed = new Map<string, number>();
+
+  const layout = () => {
+    caps = [];
+    const padX = Math.max(8, width * 0.05);
+    const padTop = height * 0.1;
+    const gap = Math.max(3, width * 0.008);
+    const baseW = Math.min((width - padX * 2 - gap * 9) / 10, (height - padTop * 1.7) / 5.15);
+    const baseH = baseW * 0.92;
+    let y = padTop;
+    KEY_ROWS.forEach((row, r) => {
+      const s = 0.9 + r * 0.034;
+      const kw = baseW * s;
+      const kh = baseH * s;
+      const rowW = row.length * kw + (row.length - 1) * gap;
+      let x = (width - rowW) / 2;
+      for (const ch of row) {
+        caps.push({ key: ch, label: ch.toUpperCase(), x, y, w: kw, h: kh, depth: kh * 0.15 });
+        x += kw + gap;
+      }
+      y += kh * 0.99;
+    });
+    const s = 0.9 + KEY_ROWS.length * 0.034;
+    const kw = baseW * s * 4.4;
+    const kh = baseH * s;
+    caps.push({ key: " ", label: "espaço", x: (width - kw) / 2, y, w: kw, h: kh, depth: kh * 0.15 });
+  };
+
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = rect.width;
+    height = rect.height;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    layout();
+    if (reduce) paint(0);
+  };
+
+  const paint = (now: number) => {
+    if (!width || !height) return;
+    ctx.clearRect(0, 0, width, height);
+
+    const halo = ctx.createRadialGradient(width / 2, height * 0.56, 0, width / 2, height * 0.56, width * 0.6);
+    halo.addColorStop(0, "rgba(122, 162, 255, 0.1)");
+    halo.addColorStop(0.55, "rgba(180, 107, 255, 0.04)");
+    halo.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, width, height);
+
+    for (const cap of caps) {
+      const t = pressed.get(cap.key);
+      const age = t === undefined ? 1 : clamp((now - t) / 220);
+      const press = t === undefined ? 0 : (1 - age) ** 2;
+      const y = cap.y + press * Math.max(2, cap.h * 0.13);
+      const radius = Math.max(3, cap.h * 0.2);
+
+      roundRect(ctx, cap.x, y + cap.depth * 0.55, cap.w, cap.h + cap.depth, radius);
+      const side = ctx.createLinearGradient(0, y, 0, y + cap.h + cap.depth);
+      side.addColorStop(0, "rgba(15, 20, 37, 0.98)");
+      side.addColorStop(1, "rgba(5, 8, 17, 0.98)");
+      ctx.fillStyle = side;
+      ctx.fill();
+
+      roundRect(ctx, cap.x, y, cap.w, cap.h, radius);
+      if (press > 0.02) {
+        const g = ctx.createLinearGradient(cap.x, y, cap.x + cap.w, y + cap.h);
+        g.addColorStop(0, "rgba(122, 162, 255, 0.96)");
+        g.addColorStop(1, "rgba(180, 107, 255, 0.9)");
+        ctx.save();
+        ctx.shadowColor = "rgba(140, 170, 255, 0.9)";
+        ctx.shadowBlur = 20 * press;
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = "rgba(222, 233, 255, 0.75)";
+        ctx.lineWidth = 1;
+      } else {
+        const g = ctx.createLinearGradient(0, y, 0, y + cap.h);
+        g.addColorStop(0, "rgba(32, 40, 68, 0.92)");
+        g.addColorStop(1, "rgba(13, 18, 34, 0.96)");
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(160, 180, 230, 0.14)";
+        ctx.lineWidth = 1;
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = press > 0.2 ? "rgba(255, 255, 255, 0.98)" : "rgba(186, 200, 232, 0.58)";
+      ctx.font = `${Math.max(7, cap.h * 0.29)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(cap.label, cap.x + cap.w / 2, y + cap.h / 2 + (press > 0.2 ? 1 : 0));
+    }
+  };
+
+  const keyFromEvent = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return "";
+    if (e.code === "Space") return " ";
+    if (e.code.startsWith("Key")) return e.code.slice(3).toLowerCase();
+    if (e.code.startsWith("Digit")) return e.code.slice(5);
+    return /^[a-z0-9]$/i.test(e.key) ? e.key.toLowerCase() : "";
+  };
+
+  const onKey = (e: KeyboardEvent) => {
+    const key = keyFromEvent(e);
+    if (!key) return;
+    pressed.set(key, performance.now());
+    if (reduce) requestAnimationFrame((now) => paint(now));
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    for (const cap of caps) {
+      if (x >= cap.x && x <= cap.x + cap.w && y >= cap.y && y <= cap.y + cap.h + cap.depth) {
+        pressed.set(cap.key, performance.now());
+        break;
+      }
+    }
+    if (reduce) requestAnimationFrame((now) => paint(now));
+  };
+
+  const loop = (now: number) => {
+    paint(now);
+    raf = requestAnimationFrame(loop);
+  };
+
+  const ro = new ResizeObserver(resize);
+  ro.observe(canvas);
+  resize();
+  window.addEventListener("keydown", onKey);
+  canvas.addEventListener("pointerdown", onPointerDown);
+  if (!reduce) raf = requestAnimationFrame(loop);
+
+  return {
+    destroy() {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener("keydown", onKey);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+    },
+  };
+}
+
+/* ---------- globo com pin de região ---------- */
+
+const DEG = Math.PI / 180;
+
+export function mountRegionGlobe(canvas: HTMLCanvasElement): { setLocation: (lat: number, lon: number) => void; destroy: () => void } {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { setLocation: () => {}, destroy: () => {} };
+
+  const reduce = prefersReduced();
+  let width = 0;
+  let height = 0;
+  let raf = 0;
+  let mx = 0;
+  let my = 0;
+  let tx = 0;
+  let ty = 0;
+  let lat = Number(canvas.dataset.lat ?? -23.55);
+  let lon = Number(canvas.dataset.lon ?? -46.63);
+  let pulse = 0;
+
+  const yawFor = (la: number, lo: number) => {
+    const phi = (90 - la) * DEG;
+    const th = lo * DEG;
+    return Math.atan2(-Math.sin(phi) * Math.cos(th), Math.sin(phi) * Math.sin(th));
+  };
+
+  let target = yawFor(lat, lon);
+  let yaw = target - 1.5;
+
+  const stars = Array.from({ length: 52 }, (_, i) => ({
+    x: ((i * 73) % 97) / 97,
+    y: ((i * 41) % 89) / 89,
+    s: 0.45 + (i % 5) * 0.16,
+    ph: i * 0.7,
+  }));
+
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = rect.width;
+    height = rect.height;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (reduce) paint(0);
+  };
+
+  const paint = (now: number) => {
+    if (!width || !height) return;
+    ctx.clearRect(0, 0, width, height);
+    mx += (tx - mx) * 0.05;
+    my += (ty - my) * 0.05;
+
+    const cx = width / 2 + mx * 8;
+    const cy = height * 0.5 + my * 6;
+    const R = Math.min(width * 0.33, height * 0.38);
+
+    for (const star of stars) {
+      const tw = reduce ? 0.5 : (Math.sin(now * 0.001 + star.ph) + 1) / 2;
+      ctx.beginPath();
+      ctx.arc(star.x * width, star.y * height, star.s, 0, TAU);
+      ctx.fillStyle = `rgba(190, 210, 255, ${(0.05 + tw * 0.14).toFixed(3)})`;
+      ctx.fill();
+    }
+
+    const wobble = reduce ? 0 : Math.sin(now * 0.00022) * 0.13;
+    const drift = target + wobble - yaw;
+    const delta = Math.atan2(Math.sin(drift), Math.cos(drift));
+    yaw += reduce ? delta : delta * 0.055;
+    const cyaw = Math.cos(yaw);
+    const syaw = Math.sin(yaw);
+
+    const toScreen = (la: number, lo: number) => {
+      const phi = (90 - la) * DEG;
+      const th = lo * DEG;
+      const x0 = Math.sin(phi) * Math.cos(th);
+      const z0 = Math.sin(phi) * Math.sin(th);
+      const y0 = Math.cos(phi);
+      const x1 = x0 * cyaw + z0 * syaw;
+      const z1 = -x0 * syaw + z0 * cyaw;
+      return { x: cx + x1 * R, y: cy - y0 * R, z: z1 };
+    };
+
+    const bg = ctx.createRadialGradient(cx - R * 0.38, cy - R * 0.42, R * 0.06, cx, cy, R * 1.18);
+    bg.addColorStop(0, "rgba(48, 62, 106, 0.62)");
+    bg.addColorStop(0.55, "rgba(12, 17, 34, 0.88)");
+    bg.addColorStop(1, "rgba(3, 5, 12, 0.94)");
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, TAU);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, TAU);
+    ctx.strokeStyle = "rgba(150, 180, 255, 0.24)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const ring = (pts: { x: number; y: number; z: number }[]) => {
+      for (const front of [false, true]) {
+        let drawing = false;
+        ctx.beginPath();
+        for (const p of pts) {
+          if (front ? p.z < 0 : p.z >= 0) {
+            drawing = false;
+            continue;
+          }
+          if (drawing) ctx.lineTo(p.x, p.y);
+          else {
+            ctx.moveTo(p.x, p.y);
+            drawing = true;
+          }
+        }
+        ctx.strokeStyle = front ? "rgba(160, 190, 255, 0.19)" : "rgba(150, 180, 255, 0.055)";
+        ctx.lineWidth = front ? 0.9 : 0.7;
+        ctx.stroke();
+      }
+    };
+
+    for (let la = -60; la <= 60; la += 30) {
+      const pts = [];
+      for (let lo = -180; lo <= 180; lo += 6) pts.push(toScreen(la, lo));
+      ring(pts);
+    }
+    for (let lo = -180; lo < 180; lo += 30) {
+      const pts = [];
+      for (let la = -90; la <= 90; la += 6) pts.push(toScreen(la, lo));
+      ring(pts);
+    }
+
+    for (let i = 0; i < 90; i++) {
+      const y0 = 1 - (i / 89) * 2;
+      const rr = Math.sqrt(Math.max(0, 1 - y0 * y0));
+      const th = i * 2.399963229728653;
+      const x0 = Math.cos(th) * rr;
+      const z0 = Math.sin(th) * rr;
+      const x1 = x0 * cyaw + z0 * syaw;
+      const z1 = -x0 * syaw + z0 * cyaw;
+      if (z1 < 0) continue;
+      ctx.beginPath();
+      ctx.arc(cx + x1 * R, cy - y0 * R, 0.8 + z1 * 0.9, 0, TAU);
+      ctx.fillStyle = `rgba(170, 200, 255, ${(0.1 + z1 * 0.36).toFixed(3)})`;
+      ctx.fill();
+    }
+
+    const pin = toScreen(lat, lon);
+    if (pin.z > -0.05) {
+      const front = clamp((pin.z + 0.25) / 1.25, 0, 1);
+      const beat = reduce ? 0.4 : (Math.sin((now - pulse) * 0.0035) + 1) / 2;
+      const scale = R / 118;
+
+      ctx.beginPath();
+      ctx.arc(pin.x, pin.y, (7 + beat * 13) * scale, 0, TAU);
+      ctx.strokeStyle = `rgba(56, 224, 200, ${(0.32 * (1 - beat) * front).toFixed(3)})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(pin.x, pin.y, 4.2 * scale, 0, TAU);
+      ctx.save();
+      ctx.shadowColor = "rgba(56, 224, 200, 0.95)";
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = `rgba(140, 245, 225, ${(0.55 + front * 0.35).toFixed(3)})`;
+      ctx.fill();
+      ctx.restore();
+
+      const tipY = pin.y;
+      const headY = pin.y - 25 * scale;
+      const pw = 7.6 * scale;
+      ctx.beginPath();
+      ctx.moveTo(pin.x, tipY);
+      ctx.quadraticCurveTo(pin.x - pw * 0.7, headY + pw, pin.x - pw, headY);
+      ctx.arc(pin.x, headY, pw, Math.PI, 0);
+      ctx.quadraticCurveTo(pin.x + pw * 0.7, headY + pw, pin.x, tipY);
+      ctx.closePath();
+      const pg = ctx.createLinearGradient(pin.x - pw, headY - pw, pin.x + pw, headY + pw);
+      pg.addColorStop(0, "rgba(144, 180, 255, 0.98)");
+      pg.addColorStop(1, "rgba(180, 107, 255, 0.95)");
+      ctx.save();
+      ctx.shadowColor = "rgba(122, 162, 255, 0.9)";
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = pg;
+      ctx.fill();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(pin.x, headY, pw * 0.36, 0, TAU);
+      ctx.fillStyle = "rgba(7, 11, 22, 0.9)";
+      ctx.fill();
+    }
+  };
+
+  const loop = (now: number) => {
+    paint(now);
+    raf = requestAnimationFrame(loop);
+  };
+
+  const onPointer = (e: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    tx = ((e.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2;
+    ty = ((e.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2;
+  };
+  const onLeave = () => {
+    tx = 0;
+    ty = 0;
+  };
+
+  const ro = new ResizeObserver(resize);
+  ro.observe(canvas);
+  resize();
+  window.addEventListener("pointermove", onPointer, { passive: true });
+  window.addEventListener("pointerleave", onLeave);
+  if (reduce) paint(0);
+  else raf = requestAnimationFrame(loop);
+
+  return {
+    setLocation(nextLat: number, nextLon: number) {
+      lat = nextLat;
+      lon = nextLon;
+      target = yawFor(lat, lon);
+      pulse = performance.now();
+      if (reduce) {
+        yaw = target;
+        paint(0);
+      }
+    },
+    destroy() {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("pointerleave", onLeave);
+    },
   };
 }
