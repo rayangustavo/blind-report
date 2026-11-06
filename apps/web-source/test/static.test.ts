@@ -28,6 +28,9 @@ const REVIEWED = new Set([
   "4byte.sourcify.dev", "world.org", "staging.world.org", "sandbox.world.org", "viem.sh", "sepolia.etherscan.io", "api-sepolia.etherscan.io",
   "rabdi.explorer.arkiv.network", "hub.arkiv.network", "oxlib.sh", "ipfs.io", "arweave.net", "docs.soliditylang.org", "abitype.dev",
   "11155111.rpc.thirdweb.com", "127.0.0.1",
+  // Namespace XML do SVG e link de código-fonte no rodapé: aparecem como texto,
+  // nunca são chamados por fetch. A CSP continua bloqueando ambos.
+  "www.w3.org", "github.com",
 ]);
 
 describe("análise estática do que a tela entrega", () => {

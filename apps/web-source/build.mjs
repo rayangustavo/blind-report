@@ -13,7 +13,19 @@ export async function buildWeb({ outDir = join(here, "dist"), config } = {}) {
   const csp = cspFor(sourceNetworkPolicy(cfg));
 
   await mkdir(outDir, { recursive: true });
-  await build({ entryPoints: [join(here, "src/main.ts")], bundle: true, format: "esm", target: "es2022", outfile: join(outDir, "app.js"), minify: true, sourcemap: false, legalComments: "none", logLevel: "silent" });
+  // O app real usa a mesma UI da demo, mas com o backend ENS/Arkiv/relayer.
+  await build({
+    entryPoints: [join(here, "demo/main.ts")],
+    define: { __DEMO_MODE__: "false" },
+    bundle: true,
+    format: "esm",
+    target: "es2022",
+    outfile: join(outDir, "app.js"),
+    minify: true,
+    sourcemap: false,
+    legalComments: "none",
+    logLevel: "silent",
+  });
   const html = (await readFile(join(here, "index.html"), "utf8")).replace("__CSP__", csp);
   await writeFile(join(outDir, "index.html"), html);
   await writeFile(join(outDir, "config.json"), JSON.stringify(cfg, null, 2));

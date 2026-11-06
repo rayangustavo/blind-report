@@ -1,11 +1,14 @@
-// Demo local da interface da fonte, com backend SIMULADO.
-// A entrada exercita a UI/controller reais com respostas falsas em memória,
-// sem depender de relayer, ENS ou World ID configurados.
+// Interface da fonte. Na demo roda com backend SIMULADO em memória; no app real
+// usa o backend ENS/Arkiv/relayer via __DEMO_MODE__ (definido no build).
 import { toBase64Url } from "@blind-report/core";
-import { SourceError } from "@blind-report/source-client";
+import { parseReceipt, SourceError } from "@blind-report/source-client";
 import { cancellable, createSourceController, type SourceState } from "../src/controller.ts";
 import { download, h, readFileBytes, readFileText } from "../src/dom.ts";
 import { setupScrolly } from "./motion.ts";
+
+// Substituído pelo esbuild: true na demo simulada, false no app real.
+declare const __DEMO_MODE__: boolean;
+const DEMO_MODE = typeof __DEMO_MODE__ === "boolean" ? __DEMO_MODE__ : true;
 
 type Tab = "enviar" | "respostas" | "verificar";
 type Route = "inicio" | "seguranca" | "denunciar" | "respostas" | "verificar";
@@ -374,11 +377,20 @@ async function start() {
   let draftText = "";
   let draftCategory = "";
 
-  const client = makeMockClient() as unknown as ReturnType<typeof import("@blind-report/source-client").createSourceClient>;
-  const proof = cancellable(async () => {
-    throw new SourceError("proof_denied", "prova indisponível no demo");
-  });
+  let controllerRef: ReturnType<typeof createSourceController> | null = null;
+  let backend: Awaited<ReturnType<typeof import("../src/real-backend.ts").createRealBackend>> | null = null;
+  if (!DEMO_MODE) {
+    const { createRealBackend } = await import("../src/real-backend.ts");
+    backend = await createRealBackend((uri) => controllerRef?.setProofLink(uri));
+  }
+  const client = (backend?.client ?? makeMockClient()) as unknown as ReturnType<typeof import("@blind-report/source-client").createSourceClient>;
+  const proof =
+    backend?.proof ??
+    cancellable(async () => {
+      throw new SourceError("proof_denied", "prova indisponível no demo");
+    });
   const controller = createSourceController(client);
+  controllerRef = controller;
 
   const err = (s: SourceState) => (s.error ? h("p", { className: "error", role: "alert" }, s.error.message) : null);
 
@@ -713,9 +725,22 @@ async function start() {
           "button",
           {
             className: "btn ghost",
-            onclick: () => {
-              out.className = "result ok";
-              out.textContent = "Você é quem enviou. (simulado)";
+            onclick: async () => {
+              if (DEMO_MODE) {
+                out.className = "result ok";
+                out.textContent = "Você é quem enviou. (simulado)";
+                return;
+              }
+              try {
+                const f = file.files?.[0];
+                if (!f) throw new Error("Selecione o envelope para provar a autoria.");
+                const ok = controller.proveAuthorship({ envelope: await readFileBytes(f), text: text.value, salt: parseReceipt(receipt.value).salt });
+                out.className = ok ? "result ok" : "result error";
+                out.textContent = ok ? "Você é quem enviou." : "O recibo não corresponde a este envelope e texto.";
+              } catch (e) {
+                out.className = "result error";
+                out.textContent = e instanceof Error ? e.message : "Não foi possível provar a autoria.";
+              }
             },
           },
           "Provar autoria",
@@ -1517,10 +1542,15 @@ async function start() {
         ),
       ),
       h(
+        "p",
+        { className: "footer-fineprint" },
+        "Para proteger sua rede, escolha por conta própria uma VPN ou outra proteção, fora deste aplicativo.",
+      ),
+      h(
         "div",
         { className: "footer-bottom" },
         h("span", {}, "© 2026 Blind Report. Código aberto sob licença MIT."),
-        h("span", {}, "Modo demonstração · backend simulado em memória"),
+        h("span", {}, DEMO_MODE ? "Modo demonstração · backend simulado em memória" : "Testnet · nenhum dado real"),
       ),
     );
   }
@@ -1596,7 +1626,7 @@ async function start() {
             },
             "Denunciar",
           ),
-          h("span", { className: "status-pill" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), "Demonstração"),
+          h("span", { className: "status-pill" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), DEMO_MODE ? "Demonstração" : "Testnet"),
         ),
       ),
     );
@@ -1717,5 +1747,7 @@ async function start() {
 }
 
 start().catch((e) => {
-  document.getElementById("app")!.textContent = "Não foi possível iniciar a demonstração: " + (e instanceof Error ? e.message : String(e));
+  document.getElementById("app")!.textContent =
+    (DEMO_MODE ? "Não foi possível iniciar a demonstração: " : "Não foi possível iniciar o aplicativo: ") +
+    (e instanceof Error ? e.message : String(e));
 });

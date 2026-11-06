@@ -13,7 +13,16 @@ const CSP =
 await mkdir(outDir, { recursive: true });
 await build({
   entryPoints: [join(here, "demo/main.ts")],
+  define: { __DEMO_MODE__: "true" },
   alias: { "@blind-report/source-client": join(here, "demo/source-client-shim.ts") },
+  plugins: [
+    {
+      name: "demo-real-backend-stub",
+      setup(build) {
+        build.onResolve({ filter: /real-backend\.ts$/ }, () => ({ path: join(here, "demo/real-backend-stub.ts") }));
+      },
+    },
+  ],
   bundle: true,
   format: "esm",
   target: "es2022",

@@ -892,6 +892,7 @@ h3 { margin: 0 0 0.4rem; font-size: 1.08rem; letter-spacing: -0.01em; }
 }
 a.icon-badge:hover { transform: translateY(-2px); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 0 34px rgba(120, 150, 255, 0.32); }
 .icon-badge svg { width: 20px; height: 20px; }
+.footer-fineprint { margin: 1.1rem 0 0; max-width: 66ch; color: #6f7894; font-size: 0.78rem; line-height: 1.55; }
 .footer-bottom {
   display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   margin-top: 1.1rem; padding-top: 0.95rem;
