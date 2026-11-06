@@ -10,7 +10,14 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["packages/*/test/**/*.test.ts", "apps/*/test/**/*.test.ts", "WEBSITE/test/**/*.test.ts", "tests/contract/**/*.test.ts", "tests/e2e/partner-prizes.test.ts"],
+    include: [
+      "packages/*/test/**/*.test.ts",
+      "apps/*/test/**/*.test.ts",
+      "WEBSITE/test/**/*.test.ts",
+      "tests/contract/**/*.test.ts",
+      "tests/e2e/partner-prizes.test.ts",
+      "tests/e2e/website-frontend.test.ts"
+    ],
     exclude: ["**/*.int.test.ts", "**/*.e2e.test.ts", "validation/**", "**/node_modules/**"],
     coverage: {
       provider: "v8",

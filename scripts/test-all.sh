@@ -49,9 +49,11 @@ npm run website:build
 success "Aplicações web compiladas com sucesso para distribuição estática segura."
 
 header "5/5: SIMULAÇÃO DO FLUXO CRIPTOGRÁFICO DE PONTA A PONTA (E2E)"
+echo -e "${YELLOW}Validando fluxo E2E com interação do usuário pelo novo frontend (WEBSITE)...${NC}"
+npm run test:e2e:frontend
 echo -e "${YELLOW}Executando os 8 passos do protocolo em tempo real...${NC}"
 node --import tsx scripts/demo-flow.ts
-success "Fluxo criptográfico de ponta a ponta validado com sucesso!"
+success "Fluxos de ponta a ponta (frontend e protocolo) validados com sucesso!"
 
 echo -e "\n${GREEN}======================================================================${NC}"
 echo -e "${GREEN}  ✓ TODOS OS TESTES E VALIDAÇÕES DO PROJETO PASSARAM COM SUCESSO!     ${NC}"
