@@ -149,7 +149,6 @@ describe("🏆 ETHGlobal Mumbai — Partner Prizes Integration Test Suite", () =
       const newsroomKp = newKeypair();
       const payloadBytes = encodePayload({
         text: "Documento exclusivo sobre desvios orçamentários.",
-        category: "investigacao",
       });
 
       const { envelope } = seal(
@@ -230,7 +229,6 @@ describe("🏆 ETHGlobal Mumbai — Partner Prizes Integration Test Suite", () =
       const replyData = encodeReply({
         newsroom: "redacao.eth",
         text: "Mensagem oficial da equipe editorial.",
-        createdAt: Date.now(),
       });
 
       const sealed = sealReply(envelope.mailboxPub, replyData);
