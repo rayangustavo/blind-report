@@ -12,6 +12,51 @@ const DEMO_MODE = typeof __DEMO_MODE__ === "boolean" ? __DEMO_MODE__ : true;
 // Na demo o nome é ilustrativo; no app real, aponta para a redação de teste
 // publicada on-chain na Sepolia (ENSv2 + text records).
 const DEFAULT_NEWSROOM = DEMO_MODE ? "investiga.eth" : "redacao.eth";
+type SourceClient = ReturnType<typeof import("@blind-report/source-client").createSourceClient>;
+
+/**
+ * App real sem relayer local: a descoberta no ENS continua real. Se o servidor
+ * de envio não responde, a tela avisa e só simula quando a pessoa escolhe —
+ * nunca transforma uma falha real em recibo de sucesso silenciosamente.
+ */
+function withOfflineFallback(real: SourceClient, mock: SourceClient, onOffline: () => void, isSimulated: () => boolean): SourceClient {
+  const offline = (e: unknown) => {
+    if (e instanceof SourceError && e.code === "network") onOffline();
+  };
+  return {
+    lookupNewsroom: (name) => real.lookupNewsroom(name),
+    async submit(input) {
+      if (isSimulated()) return mock.submit(input);
+      try {
+        return await real.submit(input);
+      } catch (e) {
+        offline(e);
+        throw e;
+      }
+    },
+    async readReplies(receipt) {
+      if (isSimulated()) return mock.readReplies(receipt);
+      try {
+        return await real.readReplies(receipt);
+      } catch (e) {
+        offline(e);
+        throw e;
+      }
+    },
+    async verifyDocument(input) {
+      if (isSimulated()) return mock.verifyDocument({ envelope: input.envelope });
+      try {
+        return await real.verifyDocument(input);
+      } catch (e) {
+        offline(e);
+        throw e;
+      }
+    },
+    proveAuthorship(input) {
+      return isSimulated() ? mock.proveAuthorship(input) : real.proveAuthorship(input);
+    },
+  };
+}
 
 type Tab = "enviar" | "respostas" | "verificar";
 type Route = "inicio" | "sobre" | "respostas" | "verificar";
@@ -302,11 +347,23 @@ async function start() {
 
   let controllerRef: ReturnType<typeof createSourceController> | null = null;
   let backend: Awaited<ReturnType<typeof import("../src/real-backend.ts").createRealBackend>> | null = null;
+  let relayerOffline = false;
+  let simulatedSend = false;
   if (!DEMO_MODE) {
     const { createRealBackend } = await import("../src/real-backend.ts");
     backend = await createRealBackend((uri) => controllerRef?.setProofLink(uri));
   }
-  const client = (backend?.client ?? makeMockClient()) as unknown as ReturnType<typeof import("@blind-report/source-client").createSourceClient>;
+  const mockClient = makeMockClient() as unknown as SourceClient;
+  const client: SourceClient = backend
+    ? withOfflineFallback(
+        backend.client,
+        mockClient,
+        () => {
+          relayerOffline = true;
+        },
+        () => simulatedSend,
+      )
+    : mockClient;
   const proof =
     backend?.proof ??
     cancellable(async () => {
@@ -334,7 +391,20 @@ async function start() {
         h(
           "div",
           { className: "actions" },
-          h("button", { className: "btn primary", onclick: () => controller.lookup(name.value), disabled: s.busy }, s.busy ? "Buscando…" : "Buscar redação", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
+          h(
+            "button",
+            {
+              className: "btn primary",
+              onclick: () => {
+                simulatedSend = false;
+                relayerOffline = false;
+                void controller.lookup(name.value);
+              },
+              disabled: s.busy,
+            },
+            s.busy ? "Buscando…" : "Buscar redação",
+            h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→"),
+          ),
         ),
         panelMeta("Conexão anônima · nenhum IP registrado"),
       );
@@ -353,6 +423,15 @@ async function start() {
         draftText = text.value;
       });
       const file = h("input", { type: "file", id: "file" }) as HTMLInputElement;
+      const simulate = async () => {
+        const f = file.files?.[0];
+        const attachment = f ? { name: f.name, data: await readFileBytes(f) } : undefined;
+        simulatedSend = true;
+        lastCategory = cat.value;
+        draftCategory = cat.value;
+        draftText = text.value;
+        await controller.submit({ category: cat.value, text: text.value, attachment });
+      };
 
       return h(
         "section",
@@ -361,7 +440,16 @@ async function start() {
         stepper(s.step),
         h("div", { className: "target" }, h("span", { className: "target-dot", "aria-hidden": "true" }), h("strong", {}, n.name), h("span", { className: "muted" }, `chave v${n.version}`)),
         h("p", { className: "muted" }, `Aceita: ${n.categories.join(", ")} · até ${n.maxBytes.toLocaleString("pt-BR")} bytes · anexos: ${n.attachments ? "sim" : "não"} · 1 envio por mês`),
-        err(s),
+        relayerOffline && !simulatedSend
+          ? h(
+              "div",
+              { className: "offline-box", role: "alert" },
+              h("strong", {}, "Relayer local offline."),
+              h("p", {}, "Nada foi enviado. O servidor de envio (127.0.0.1:8787) não respondeu; seu texto continua aqui."),
+              h("button", { className: "btn ghost", onclick: () => void simulate() }, "Simular entrega local"),
+              h("p", { className: "muted" }, "A simulação acontece só neste aparelho: não grava nada na Sepolia nem no Arkiv."),
+            )
+          : err(s),
         field("Categoria", "cat", cat),
         field("Texto", "txt", text),
         n.attachments ? field("Anexo (opcional)", "file", file) : null,
@@ -434,6 +522,7 @@ async function start() {
 
     draftText = "";
     draftCategory = "";
+    const localOnly = simulatedSend && !DEMO_MODE;
     let receipt: Record<string, unknown> | null = null;
     try {
       receipt = JSON.parse(s.receiptText ?? "");
@@ -455,7 +544,13 @@ async function start() {
     return h(
       "section",
       { className: "panel" },
-      panelHead("04 / 04", "Denúncia enviada", "Um recibo foi gerado neste aparelho. Ele não é armazenado em nenhum servidor."),
+      panelHead(
+        "04 / 04",
+        localOnly ? "Denúncia simulada" : "Denúncia enviada",
+        localOnly
+          ? "O relayer local não respondeu: nada saiu deste aparelho. O recibo abaixo simula o fluxo real."
+          : "Um recibo foi gerado neste aparelho. Ele não é armazenado em nenhum servidor.",
+      ),
       stepper(s.step),
       h(
         "div",
@@ -464,8 +559,14 @@ async function start() {
         h(
           "div",
           { className: "success-copy" },
-          h("h3", {}, "Envelope selado e entregue"),
-          h("p", { className: "muted" }, "Sua denúncia já está com a redação. O recibo abaixo é a única cópia da chave de leitura."),
+          h("h3", {}, localOnly ? "Envelope selado localmente" : "Envelope selado e entregue"),
+          h(
+            "p",
+            { className: "muted" },
+            localOnly
+              ? "Nenhum dado foi enviado. Este recibo existe só para você conhecer o restante do fluxo."
+              : "Sua denúncia já está com a redação. O recibo abaixo é a única cópia da chave de leitura.",
+          ),
         ),
       ),
       h(
@@ -522,7 +623,23 @@ async function start() {
         h("input", { type: "checkbox", checked: s.receiptSaved, onchange: () => controller.confirmReceiptSaved() }),
         h("span", {}, "Já guardei o recibo"),
       ),
-      h("div", { className: "actions" }, h("button", { className: "btn ghost", onclick: () => controller.finish(), disabled: !s.receiptSaved }, "Concluir")),
+      h(
+        "div",
+        { className: "actions" },
+        h(
+          "button",
+          {
+            className: "btn ghost",
+            onclick: () => {
+              simulatedSend = false;
+              relayerOffline = false;
+              controller.finish();
+            },
+            disabled: !s.receiptSaved,
+          },
+          "Concluir",
+        ),
+      ),
       panelMeta("Recibo só neste aparelho · não guardamos cópia"),
     );
   }
@@ -1531,6 +1648,15 @@ async function start() {
     );
   }
 
+  function simulationBanner(): HTMLElement {
+    return h(
+      "div",
+      { className: "simulation-banner", role: "status" },
+      h("strong", {}, "Modo simulado."),
+      " O servidor de envio local (relayer) não respondeu. Esta entrega ficou neste aparelho e não foi gravada na Sepolia nem no Arkiv.",
+    );
+  }
+
   let lastView = "";
   let disposeScrolly: (() => void) | null = null;
   function render(s: SourceState) {
@@ -1588,6 +1714,7 @@ async function start() {
       h("a", { className: "skip", href: "#conteudo" }, "Ir para o conteúdo"),
       route === "sobre" ? scrollProgress() : null,
       topbar(),
+      !DEMO_MODE && simulatedSend ? simulationBanner() : null,
       route === "sobre" ? chapterNav() : null,
       main,
       footer(),

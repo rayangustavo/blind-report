@@ -2435,3 +2435,44 @@ canvas { filter: sepia(0.42) saturate(1.35) hue-rotate(-14deg); }
   font-family: var(--mono);
   font-size: 0.78rem;
 }
+
+/* aviso quando o relayer local está fora e a entrega é simulada */
+.simulation-banner {
+  max-width: 1120px;
+  margin: 0.8rem auto 0;
+  padding: 0.62rem 0.9rem;
+  border: 1px solid rgba(226, 161, 60, 0.42);
+  border-left: 3px solid var(--accent);
+  background: rgba(226, 161, 60, 0.075);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.simulation-banner strong { color: var(--accent); }
+
+/* relayer fora: a pessoa decide se quer simular o restante do fluxo */
+.offline-box {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(226, 161, 60, 0.42);
+  border-left: 3px solid var(--accent);
+  background: rgba(226, 161, 60, 0.075);
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+.offline-box strong {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--accent);
+  font-family: var(--serif);
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+.offline-box p { margin: 0.35rem 0 0; }
+.offline-box .btn { margin: 0.75rem 0 0; }
+.offline-box .muted { font-size: 0.78rem; }
+
+@media (max-width: 620px) {
+  .simulation-banner { margin: 0.6rem 1rem 0; font-size: 0.72rem; }
+}
