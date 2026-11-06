@@ -1,14 +1,22 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { createWebsiteController, type WebsiteControllerState, type WebsiteDeps, STATUS_LABELS } from './website-controller'
+import {
+  createWebsiteController,
+  type ControllerOptions,
+  type WebsiteControllerState,
+  type WebsiteDeps,
+  STATUS_LABELS,
+} from './website-controller'
 
 // Instância singleton para uso no cliente se não fornecida
 let globalController: ReturnType<typeof createWebsiteController> | null = null
 
-export function getGlobalWebsiteController(deps?: WebsiteDeps) {
+export function getGlobalWebsiteController(deps?: WebsiteDeps, options?: ControllerOptions) {
   if (!globalController) {
-    globalController = createWebsiteController(deps)
+    globalController = createWebsiteController(deps, undefined, options)
+  } else if (options?.mode && globalController.state.appMode !== options.mode) {
+    globalController.setAppMode(options.mode)
   }
   return globalController
 }
@@ -17,13 +25,16 @@ export function resetGlobalWebsiteController() {
   globalController = null
 }
 
-export function useWebsiteController(initialDeps?: WebsiteDeps) {
-  const controller = useMemo(() => getGlobalWebsiteController(initialDeps), [initialDeps])
+export function useWebsiteController(initialDeps?: WebsiteDeps, options?: ControllerOptions) {
+  const controller = useMemo(() => getGlobalWebsiteController(initialDeps, options), [initialDeps, options?.mode])
   const [state, setState] = useState<WebsiteControllerState>(controller.state)
 
   useEffect(() => {
+    if (options?.mode && controller.state.appMode !== options.mode) {
+      controller.setAppMode(options.mode)
+    }
     return controller.subscribe((s) => setState({ ...s }))
-  }, [controller])
+  }, [controller, options?.mode])
 
   const filteredReports = useMemo(() => {
     return state.filter === 'All statuses' || state.filter === 'Todos os status'
@@ -48,6 +59,12 @@ export function useWebsiteController(initialDeps?: WebsiteDeps) {
     selectReport: controller.selectReport.bind(controller),
     setActiveDeskTab: controller.setActiveDeskTab.bind(controller),
     clearAlerts: controller.clearAlerts.bind(controller),
+
+    // Modo & Cenários Demo
+    setAppMode: controller.setAppMode.bind(controller),
+    setLastTx: controller.setLastTx.bind(controller),
+    fastTrackZkpProof: controller.fastTrackZkpProof.bind(controller),
+    loadDemoScenario: controller.loadDemoScenario.bind(controller),
 
     // Web3 / Carteira
     connectWallet: controller.connectWallet.bind(controller),
