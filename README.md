@@ -12,6 +12,15 @@ O **Blind Report** é uma plataforma que permite a qualquer cidadão ou fonte en
 - **Prevenção de Spam com World ID**: Prova de humanidade de conhecimento zero (ZKP) garantindo no máximo 1 denúncia por pessoa por período (época) por redação, sem revelar a identidade da fonte.
 - **Privacidade Extrema**: Sem logs de IP, sem trackers, código estático sem chamadas externas ocultas e guardrails rígidos contra vazamento de rede.
 
+## 🏆 ETHGlobal Mumbai — Partner Prizes
+
+Este projeto concorre ativamente aos seguintes **Partner Prizes** no ETHGlobal Mumbai:
+1. **ENS (Ethereum Name Service)**: PKI descentralizada para chaves e políticas em text records + subnomes delegados para jornalistas.
+2. **Arkiv Network**: Persistência descentralizada de envelopes com ciclo de vida, expiração por blocos, custódia e renovação.
+3. **World ID (Worldcoin)**: Prova de Humanidade ZKP (Protocolo 4.0) e nullifiers amarrados à ação para mitigação de spam e Sybil.
+
+👉 **Consulte [PARTNER_PRIZES.md](PARTNER_PRIZES.md) para detalhes técnicos da arquitetura, chamadas de SDK e feedback dos parceiros.**
+
 ## Estrutura do Monorepo
 
 ```
