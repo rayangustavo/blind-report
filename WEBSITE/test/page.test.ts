@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { resolve } from 'node:path'
+import { createWebsiteController } from '../lib/website-controller'
 
 const PAGE_PATH = resolve(import.meta.dirname, '../app/page.tsx')
+const CONTROLLER_PATH = resolve(import.meta.dirname, '../lib/website-controller.ts')
 const pageSource = readFileSync(PAGE_PATH, 'utf8')
+const controllerSource = readFileSync(CONTROLLER_PATH, 'utf8')
 
 describe('WEBSITE - Contratos Estruturais da Página Principal (app/page.tsx)', () => {
   it('contem os 3 fluxos de navegacao principais (home, report, desk)', () => {
@@ -54,5 +57,88 @@ describe('WEBSITE - Contratos Estruturais da Página Principal (app/page.tsx)', 
     expect(pageSource).toMatch(/AVG\. RESPONSE TIME|TEMPO MÉDIO DE RESPOSTA/)
     expect(pageSource).toMatch(/Internal note|Nota interna/)
     expect(pageSource).toMatch(/Tip status|Status da denúncia/)
+  })
+
+  it('nao gera link simulado invalido para o fallback do World ID', () => {
+    expect(controllerSource).not.toContain('staging.world.org/verify?t=wld&i=simulated-')
+  })
+
+  it('usa um newsroom ENS valido para o World ID', () => {
+    expect(controllerSource).toContain("selectedNewsroom: SHOWCASE_ACCOUNTS.newsroom")
+    expect(controllerSource).not.toContain("selectedNewsroom: 'Public Ledger'")
+  })
+
+  it('normaliza qualquer label de newsroom para o ENS valido', () => {
+    const controller = createWebsiteController()
+    controller.selectNewsroom('Public Ledger')
+    expect(controller.state.selectedNewsroom).toBe('jornal-livre.eth')
+  })
+
+  it('usa o relayer real para publicar a denuncia quando nao ha sourceClient', async () => {
+    const calls: Array<{ url: string; method?: string; body?: string }> = []
+    const controller = createWebsiteController({
+      fetchFn: async (url, init) => {
+        calls.push({
+          url: String(url),
+          method: init?.method ? String(init.method) : 'GET',
+          body: typeof init?.body === 'string' ? init.body : undefined,
+        })
+
+        if (String(url).includes('/submissions')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ key: '0xabc123', parts: 1 }),
+          } as Response
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true }),
+        } as Response
+      },
+    })
+
+    controller.selectNewsroom('jornal-livre.eth')
+    controller.selectCategory('Corruption')
+    controller.setMessage('Mensagem válida para teste de publicação real do tip.')
+    ;(controller.state as any).worldIdProof = {
+      protocol_version: '4.0',
+      action: 'submit:jornal-livre.eth:202611',
+      environment: 'staging',
+      responses: [{ nullifier: '0xabc', proof: ['0x1', '0x2'] }],
+    }
+
+    const receipt = await controller.submitReport()
+
+    expect(receipt.key).toBeDefined()
+    expect(calls.some((c) => c.url.includes('/submissions'))).toBe(true)
+    const submissionCall = calls.find((c) => c.url.includes('/submissions'))
+    expect(submissionCall?.method).toBe('POST')
+    expect(submissionCall?.body).toContain('"proof"')
+    expect(submissionCall?.body).toContain('"envelope"')
+  })
+
+  it('nao quebra a UI quando o relayer falha com Failed to fetch', async () => {
+    const controller = createWebsiteController({
+      fetchFn: async () => {
+        throw new TypeError('Failed to fetch')
+      },
+    })
+
+    controller.selectNewsroom('jornal-livre.eth')
+    controller.selectCategory('Corruption')
+    controller.setMessage('Mensagem válida para teste de fallback de rede.')
+    ;(controller.state as any).worldIdProof = {
+      protocol_version: '4.0',
+      action: 'submit:jornal-livre.eth:202611',
+      environment: 'staging',
+      responses: [{ nullifier: '0xdef', proof: ['0x1'] }],
+    }
+
+    await expect(controller.submitReport()).resolves.toBeNull()
+    expect(controller.state.error).toContain('relayer')
+    expect(controller.state.busy).toBe(false)
   })
 })

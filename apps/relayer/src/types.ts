@@ -24,6 +24,8 @@ export type RelayerDeps = {
   maxBodyBytes: number;
   retentionSeconds: number;
   allowedOrigins: string[];
+  /** Newsrooms demo/locais que podem existir em ambiente de prova mesmo sem registro no ENS real. */
+  allowUnregisteredNewsrooms?: string[];
   /** Limite global de requisições (opcional). */
   limiter?: { tryTake(): boolean };
 };

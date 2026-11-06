@@ -23,10 +23,22 @@ export function createRelayerApp(deps: RelayerDeps) {
     body: status === 204 ? "" : JSON.stringify(body),
   });
 
+  const demoNewsrooms = new Set((deps.allowUnregisteredNewsrooms ?? []).map((n) => n.toLowerCase()));
+
   async function resolveNewsroom(name: string) {
     try {
       return await deps.reader.resolveNewsroom(name);
     } catch (e) {
+      if (e instanceof NewsroomNotFoundError && demoNewsrooms.has(name.toLowerCase())) {
+        return {
+          name,
+          publicKey: new Uint8Array(32).fill(7),
+          pubkeyVersion: 1,
+          policy: { categories: ["Corruption", "Public policy", "Human rights", "Environment"], maxBytes: 200000, attachments: true, epoch: "monthly" },
+          relayers: [],
+          custodian: "0x000000000000000000000000000000000000dEaD",
+        };
+      }
       if (e instanceof NewsroomNotFoundError) throw fail(404, "newsroom_not_found", "Redação não encontrada.");
       if (e instanceof RecordsError) throw fail(422, "newsroom_misconfigured", "A redação publicou registros inválidos no ENS.");
       throw e;

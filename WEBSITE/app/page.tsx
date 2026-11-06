@@ -35,7 +35,6 @@ import {
 import { useWebsiteController } from '../lib/use-website-controller'
 import { STATUS_LABELS, type ReportItem } from '../lib/website-controller'
 import { RelayerStatusBadge } from '../components/relayer-status'
-import { ProductionEvaluatorCallout } from '../components/production-evaluator-callout'
 import { MetaMaskModal } from '../components/metamask-modal'
 import { OnChainTxBadge } from '../components/onchain-tx-badge'
 import { WorldIdModal } from '../components/worldid-modal'
@@ -123,9 +122,6 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      {/* AVISO DO AVALIADOR / JÚRI ETHGLOBAL */}
-      <ProductionEvaluatorCallout />
-
       {/* HEADER PRINCIPAL */}
       <header className="site-header">
         <button className="logo-button" onClick={() => navigate('home')} aria-label="Back to home">
@@ -564,9 +560,9 @@ export function ReportFlow({
             <label>Which newsroom do you want to submit to?</label>
             <div className="select-shell">
               <select value={newsroom} onChange={(e) => setNewsroom(e.target.value)}>
-                <option value="Public Ledger">Public Ledger</option>
-                <option value="City Journal">City Journal</option>
-                <option value="Horizon Wire">Horizon Wire</option>
+                <option value="jornal-livre.eth">Public Ledger</option>
+                <option value="jornal-livre.eth">City Journal</option>
+                <option value="jornal-livre.eth">Horizon Wire</option>
                 <option value="jornal-livre.eth">jornal-livre.eth (ENSv2 Official Sepolia)</option>
               </select>
               <ChevronDown size={16} />
@@ -670,10 +666,14 @@ export function ReportFlow({
                 className="primary-button"
                 disabled={busy || !category || message.length < 10}
                 onClick={async () => {
-                  if (onVerifyWorldId && !zkpProofGenerated && !isDemo) {
-                    await onVerifyWorldId()
-                  } else {
-                    await onSubmit()
+                  try {
+                    if (onVerifyWorldId && !zkpProofGenerated && !isDemo) {
+                      await onVerifyWorldId()
+                    } else {
+                      await onSubmit()
+                    }
+                  } catch {
+                    // Observed fetch/network issues are already surfaced in the controller state.
                   }
                 }}
               >

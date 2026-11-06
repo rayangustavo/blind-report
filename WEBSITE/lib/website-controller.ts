@@ -128,6 +128,7 @@ export type WebsiteControllerState = {
   worldIdStatus: 'idle' | 'waiting' | 'verified' | 'error'
   worldIdError: string | null
   worldIdAction: string | null
+  worldIdProof?: Record<string, any>
 
   // Web3 & Sessão
   walletAddress?: string
@@ -199,6 +200,12 @@ export const SHOWCASE_ACCOUNTS = {
   reporterSubname: 'reporter.jornal-livre.eth',
 }
 
+const normalizeNewsroom = (newsroom?: string | null): string => {
+  const raw = newsroom?.trim() ?? ''
+  if (!raw) return SHOWCASE_ACCOUNTS.newsroom
+  return raw.includes('.eth') ? raw : SHOWCASE_ACCOUNTS.newsroom
+}
+
 export function createWebsiteController(
   deps: WebsiteDeps = {},
   initialReports: ReportItem[] = INITIAL_MOCK_REPORTS,
@@ -210,7 +217,7 @@ export function createWebsiteController(
   let state: WebsiteControllerState = {
     view: 'home',
     reportStep: 1,
-    selectedNewsroom: 'Public Ledger',
+    selectedNewsroom: SHOWCASE_ACCOUNTS.newsroom,
     selectedCategory: '',
     message: '',
     receipt: null,
@@ -234,6 +241,7 @@ export function createWebsiteController(
     worldIdStatus: 'idle',
     worldIdError: null,
     worldIdAction: null,
+    worldIdProof: undefined,
 
     // Web3 / Role
     walletAddress: undefined,
@@ -258,7 +266,7 @@ export function createWebsiteController(
     ],
 
     // Relayer
-    relayerUrl: 'http://localhost:3001',
+    relayerUrl: typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_RELAYER_URL ?? 'http://127.0.0.1:8787') : 'http://127.0.0.1:8787',
     relayerStatus: 'online',
     relayerSponsor: SHOWCASE_ACCOUNTS.relayer,
 
@@ -342,7 +350,7 @@ export function createWebsiteController(
     },
 
     selectNewsroom(newsroom: string) {
-      set({ selectedNewsroom: newsroom, error: null })
+      set({ selectedNewsroom: normalizeNewsroom(newsroom), error: null })
     },
 
     selectCategory(category: string) {
@@ -403,7 +411,28 @@ export function createWebsiteController(
       })
     },
 
+    async finalizeWorldIdApproval() {
+      set({
+        worldIdStatus: 'verified',
+        zkpProofGenerated: true,
+        worldIdModalOpen: false,
+      })
+
+      try {
+        const receipt = await controller.submitReport()
+        return receipt
+      } catch (err) {
+        set({
+          worldIdStatus: 'error',
+          worldIdError: err instanceof Error ? err.message : 'Verification approved but submission failed.',
+        })
+        throw err
+      }
+    },
+
     async openWorldIdVerification() {
+      const newsroom = normalizeNewsroom(state.selectedNewsroom)
+
       set({
         worldIdModalOpen: true,
         worldIdStatus: 'waiting',
@@ -413,7 +442,7 @@ export function createWebsiteController(
 
       try {
         const fetchFn = deps.fetchFn ?? globalThis.fetch
-        const res = await fetchFn(`/api/rp-context?newsroom=${encodeURIComponent(state.selectedNewsroom)}`)
+        const res = await fetchFn(`/api/rp-context?newsroom=${encodeURIComponent(newsroom)}`)
         if (!res.ok) {
           throw new Error(`Failed to initialize World ID context: ${res.statusText}`)
         }
@@ -430,30 +459,31 @@ export function createWebsiteController(
 
         set({ worldIdConnectorUri: req.connectorURI })
 
-        req
-          .pollUntilCompletion({ timeout: 600000 })
-          .then((done: any) => {
-            if (done.success) {
-              set({ worldIdStatus: 'verified', zkpProofGenerated: true })
-              setTimeout(() => {
-                set({ worldIdModalOpen: false })
-                controller.submitReport()
-              }, 1000)
-            } else {
-              set({ worldIdStatus: 'error', worldIdError: done.error ?? 'Verification rejected in World ID' })
-            }
-          })
-          .catch((err: any) => {
-            set({ worldIdStatus: 'error', worldIdError: err?.message ?? 'Polling error' })
-          })
+        const done = await req.pollUntilCompletion({ timeout: 600000 })
+
+        if (done.success) {
+          const proof = (done.result ?? done) as Record<string, any>
+          set({ worldIdStatus: 'verified', zkpProofGenerated: true, worldIdProof: proof })
+          return await controller.finalizeWorldIdApproval()
+        }
+
+        set({ worldIdStatus: 'error', worldIdError: done.error ?? 'Verification rejected in World ID' })
+        return null
       } catch (err: any) {
-        const action = `submit:${state.selectedNewsroom}:202611`
-        const simulatedConnector = `https://staging.world.org/verify?t=wld&i=simulated-${Date.now()}`
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'World ID verification could not start. Check WORLD_APP_ID, WORLD_RP_ID and RP_SIGNING_KEY in the environment.'
+
         set({
-          worldIdAction: action,
-          worldIdConnectorUri: simulatedConnector,
-          worldIdStatus: 'waiting',
+          worldIdAction: `submit:${normalizeNewsroom(state.selectedNewsroom)}:202611`,
+          worldIdConnectorUri: null,
+          worldIdStatus: 'error',
+          worldIdError:
+            'World ID session failed to initialize. Use a valid app_id/rp_id and RP signing key; do not paste the QR image URL into the simulator.',
+          notice: message,
         })
+        throw err
       }
     },
 
@@ -461,12 +491,16 @@ export function createWebsiteController(
       set({ worldIdModalOpen: false, worldIdStatus: 'idle', worldIdConnectorUri: null, worldIdError: null })
     },
 
-    simulateWorldIdApproval() {
-      set({ worldIdStatus: 'verified', zkpProofGenerated: true })
-      setTimeout(() => {
-        set({ worldIdModalOpen: false })
-        controller.submitReport()
-      }, 600)
+    async simulateWorldIdApproval() {
+      const proof = {
+        protocol_version: '4.0',
+        action: `submit:${normalizeNewsroom(state.selectedNewsroom)}:${new Date().getUTCFullYear()}${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`,
+        environment: 'staging',
+        responses: [{ nullifier: '0x' + 'ab'.repeat(30), proof: ['0x1', '0x2', '0x3', '0x4', '0x5'] }],
+      }
+      set({ worldIdStatus: 'verified', zkpProofGenerated: true, worldIdProof: proof })
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      return await controller.finalizeWorldIdApproval()
     },
 
     loadDemoScenario(
@@ -1003,6 +1037,35 @@ export function createWebsiteController(
           if (res.receipt) {
             receiptKey = res.receipt.key ?? receiptKey
           }
+        } else {
+          const relayerBase = (state.relayerUrl ?? 'http://127.0.0.1:8787').replace(/\/+$/, '')
+          const proof = state.worldIdProof ?? {
+            protocol_version: '4.0',
+            action: state.worldIdAction ?? `submit:${state.selectedNewsroom}:${new Date().getUTCFullYear()}${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`,
+            environment: 'staging',
+            responses: [{ nullifier: '0x' + 'aa'.repeat(30), proof: ['0x1', '0x2', '0x3', '0x4', '0x5'] }],
+          }
+
+          const res = await (deps.fetchFn ?? fetch)(`${relayerBase}/submissions`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              newsroom: state.selectedNewsroom,
+              epoch: new Date().getUTCFullYear() * 100 + (new Date().getUTCMonth() + 1),
+              category: state.selectedCategory,
+              hasAttachment: Boolean(state.attachment),
+              proof,
+              envelope: toBase64Url(rawEnv),
+            }),
+          })
+
+          if (!res.ok) {
+            const payload = await res.json().catch(() => ({}))
+            throw new Error(payload?.error?.message ?? 'Failed to publish the tip on the relayer.')
+          }
+
+          const json = await res.json().catch(() => ({}))
+          receiptKey = json.key ?? receiptKey
         }
 
         const generatedId = `BR-${Math.floor(1000 + Math.random() * 9000)}`
@@ -1057,7 +1120,16 @@ export function createWebsiteController(
 
         return receipt
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Failed to submit tip.' })
+        const rawMessage = err instanceof Error ? err.message : String(err ?? 'Failed to submit tip.')
+        const isFetchFailure = /failed to fetch|networkerror|typeerror/i.test(rawMessage)
+        const friendlyMessage = isFetchFailure
+          ? `Could not reach the relayer at ${state.relayerUrl}. Start the backend with "npm run relayer" or update the relayer URL.`
+          : rawMessage || 'Failed to submit tip.'
+
+        set({ busy: false, error: friendlyMessage })
+        if (isFetchFailure) {
+          return null as any
+        }
         throw err
       }
     },

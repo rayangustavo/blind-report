@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Copy, ExternalLink, ShieldCheck, Sparkles, X, Zap } from 'lucide-react'
+import { Check, Copy, ShieldCheck, Sparkles, X, Zap } from 'lucide-react'
 
 interface WorldIdModalProps {
   isOpen: boolean
@@ -33,7 +33,10 @@ export function WorldIdModal({
     setTimeout(() => setCopied(false), 2500)
   }
 
-  const qrImageUrl = connectorUri
+  const isValidConnectorLink =
+    !!connectorUri && /https:\/\/[^/]*world[^/]*\.org\/verify/i.test(connectorUri)
+
+  const qrImageUrl = isValidConnectorLink
     ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(connectorUri)}&bgcolor=08-20-17&color=239-182-75`
     : null
 
@@ -144,25 +147,13 @@ export function WorldIdModal({
               )}
             </div>
 
-            {/* BOTÃO PRINCIPAL: ABRIR NO WORLDCOIN SIMULATOR */}
-            <div className="flex gap-2 w-full mt-2" style={{ flexWrap: 'wrap' }}>
-              <a
-                href="https://simulator.worldcoin.org"
-                target="_blank"
-                rel="noreferrer"
-                className="primary-button"
-                style={{
-                  flex: '1 1 200px',
-                  justifyContent: 'center',
-                  textAlign: 'center',
-                  fontSize: '12px',
-                  padding: '8px 14px',
-                }}
-                title="Abre o Worldcoin Simulator em nova aba"
-              >
-                Abrir Worldcoin Simulator <ExternalLink size={13} />
-              </a>
+            {connectorUri && (
+              <div className="w-full rounded border border-slate-700 bg-slate-950/80 px-2 py-1 text-[10px] text-slate-300 break-all">
+                <span className="font-semibold text-slate-200">Link bruto:</span> {connectorUri}
+              </div>
+            )}
 
+            <div className="flex gap-2 w-full mt-2 justify-center" style={{ flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="outline-button"
@@ -201,7 +192,7 @@ export function WorldIdModal({
             </div>
             <ol style={{ margin: 0, paddingLeft: '16px' }}>
               <li>Clique em <strong>"Abrir Worldcoin Simulator"</strong> (ou acesse simulator.worldcoin.org).</li>
-              <li>Clique em <strong>"Copiar URI"</strong> e cole no campo do simulador (ou aponte a câmera).</li>
+              <li>Use o <strong>link bruto</strong> exibido acima ou clique em <strong>"Copiar URI"</strong>. Não cole a URL do QR code gerado pelo qrserver.</li>
               <li>Selecione <strong>"Device"</strong> ou <strong>"Orb"</strong> e clique em <strong>"Verify"</strong> no simulador.</li>
               <li>Esta tela receberá a prova ZKP automaticamente e concluirá o envio!</li>
             </ol>

@@ -47,7 +47,7 @@ describe('WEBSITE E2E — Fluxo Completo de Interação do Usuário no Novo Fron
 
     // 7. Validação do recibo e transição de tela
     expect(mockSubmit).toHaveBeenCalledWith({
-      newsroom: 'Folha Pública',
+      newsroom: 'jornal-livre.eth',
       category: 'Corrupção',
       text: textoDenuncia,
       attachment: undefined,
@@ -55,13 +55,41 @@ describe('WEBSITE E2E — Fluxo Completo de Interação do Usuário no Novo Fron
     expect(controller.state.reportStep).toBe(3)
     expect(receipt.id).toMatch(/^BR-\d{4}$/)
     expect(receipt.category).toBe('Corrupção')
-    expect(receipt.newsroom).toBe('Folha Pública')
+    expect(receipt.newsroom).toBe('jornal-livre.eth')
     expect(receipt.key).toBe('0x1111222233334444555566667777888899990000111122223333444455556666')
     expect(controller.state.receipt).toEqual(receipt)
 
     // 8. Usuário clica em "Voltar ao início"
     controller.navigate('home')
     expect(controller.state.view).toBe('home')
+  })
+
+  it('faz a atualização automática imediatamente após a aprovação do World ID', async () => {
+    const mockSubmit = vi.fn(async () => ({
+      receipt: {
+        key: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        contentHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        salt: new Uint8Array([1, 2, 3]),
+        mailboxPriv: new Uint8Array(32),
+        mailboxPub: new Uint8Array(32),
+      },
+    }))
+
+    const controller = createWebsiteController({
+      sourceClient: { submit: mockSubmit },
+    })
+
+    controller.startReport()
+    controller.selectCategory('Corrupção')
+    controller.setMessage('Denúncia detalhada sobre contratos superfaturados e pagamentos suspeitos no setor público.')
+    controller.setReportStep(2)
+
+    const receipt = await controller.simulateWorldIdApproval()
+
+    expect(mockSubmit).toHaveBeenCalledTimes(1)
+    expect(controller.state.reportStep).toBe(3)
+    expect(receipt).toBeTruthy()
+    expect(controller.state.receipt).toEqual(receipt)
   })
 
   it('executa a jornada completa do jornalista (Editorial Desk): Triagem, Decifragem, Anotacao e Status', async () => {
@@ -153,7 +181,7 @@ describe('WEBSITE E2E — Fluxo Completo de Interação do Usuário no Novo Fron
 
     const fakeReceipt = {
       id: 'BR-1234',
-      newsroom: 'Folha Pública',
+      newsroom: 'jornal-livre.eth',
       category: 'Corrupção',
       key: '0x123',
       date: 'Ontem',

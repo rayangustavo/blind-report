@@ -53,6 +53,15 @@ describe("GET /rp-context", () => {
     expect(f.rpContextFor).not.toHaveBeenCalled();
   });
 
+  it("aceita_redacao_demo_configurada_mesmo_sem_registro_no_ens", async () => {
+    const f = makeDeps({ allowUnregisteredNewsrooms: [NEWSROOM] });
+    f.resolveNewsroom.mockRejectedValueOnce(new NewsroomNotFoundError(NEWSROOM));
+    const r = await createRelayerApp(f.deps).handle(req("GET", `/rp-context?newsroom=${NEWSROOM}`));
+    expect(r.status).toBe(200);
+    expect(json(r)).toMatchObject({ action: `submit:${NEWSROOM}:${EPOCH}` });
+    expect(f.rpContextFor).toHaveBeenCalledWith({ newsroom: NEWSROOM, epoch: EPOCH });
+  });
+
   it("redacao_com_registros_invalidos_gera_422", async () => {
     const f = makeDeps();
     f.resolveNewsroom.mockRejectedValueOnce(new RecordsError("pubkey", "Falta o registro denuncia.pubkey."));

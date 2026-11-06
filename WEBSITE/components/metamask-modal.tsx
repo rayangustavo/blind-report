@@ -1,7 +1,6 @@
 'use client'
 
-import { AlertTriangle, ArrowRight, Download, ExternalLink, X } from 'lucide-react'
-import Link from 'next/link'
+import { AlertTriangle, Download, ExternalLink, X } from 'lucide-react'
 
 export function MetaMaskModal({
   isOpen,
@@ -45,17 +44,6 @@ export function MetaMaskModal({
               >
                 <Download size={14} /> Install MetaMask <ExternalLink size={12} />
               </a>
-            </div>
-
-            <div className="metamask-option-card highlight">
-              <span className="evaluator-tag">RECOMMENDED FOR JUDGES</span>
-              <h4>Option 2: Open Evaluator Demo</h4>
-              <p className="text-xs text-gray-400 mb-3">
-                If you are evaluating for the hackathon and do not wish to configure a Sepolia test wallet right now, test all features in our interactive demo.
-              </p>
-              <Link href="/demo" className="outline-button small-button inline-flex items-center gap-1.5" onClick={onClose}>
-                Launch /demo Fast-Track <ArrowRight size={14} />
-              </Link>
             </div>
           </div>
         </div>

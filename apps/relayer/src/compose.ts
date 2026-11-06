@@ -47,6 +47,7 @@ export function composeRelayer(config: Config, overrides: ComposeOverrides = {})
   const app = createRelayerApp({
     reader, store, gate, signer, logger, now: overrides.now ?? (() => new Date()), appId: config.appId, environment: config.environment,
     limiter: createRateLimiter({ perMinute: config.rateLimitPerMinute, now: () => Date.now() }), maxBodyBytes: config.maxBodyBytes, retentionSeconds: config.retentionDays * day, allowedOrigins: config.allowedOrigins,
+    allowUnregisteredNewsrooms: config.newsrooms,
   });
   const renewal = createRenewalJob({
     store, newsrooms: config.newsrooms, withinSeconds: config.renewWithinDays * day, retentionSeconds: config.retentionDays * day,
