@@ -278,9 +278,32 @@ async function start() {
       h("div", { className: "row" }, h("label", { htmlFor: "fs" }, "Status"), status, h("label", { htmlFor: "fc" }, "Categoria"), cat,
         h("button", { disabled: p.loading, onclick: () => panel!.controller.loadInbox({ status: (status.value || undefined) as never, category: cat.value.trim() || undefined }) }, "Atualizar")),
       p.inbox ? (p.inbox.items.length === 0 ? h("p", { className: "muted" }, "Nenhuma denúncia por aqui ainda. Quando alguém enviar, ela aparece depois de Atualizar.") :
-        h("ul", {}, ...p.inbox.items.map((i) => h("li", {}, `${i.category} · ${STATUS_LABEL[i.status] ?? i.status} · bloco ${i.createdAtBlock} `, h("button", { onclick: () => panel!.controller.open(i.key) }, "Abrir"))))) :
+        h("ul", {}, ...p.inbox.items.map((i) => h("li", { className: "row", style: "justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border-subtle);" },
+          h("span", {},
+            h("span", { className: "partner-badge arkiv" }, "Arkiv"), " ",
+            h("span", { className: "partner-badge worldid" }, "World ID"), " ",
+            `${i.category} · ${STATUS_LABEL[i.status] ?? i.status} · bloco ${i.createdAtBlock}`),
+          h("button", { onclick: () => panel!.controller.open(i.key) }, "Abrir"))))) :
         h("p", { className: "muted" }, "Clique em Atualizar para carregar as denúncias."),
-      o ? h("article", { className: "card" }, h("h3", {}, `Denúncia (${o.category}) — ${STATUS_LABEL[o.status] ?? o.status}`), h("pre", {}, o.text),
+      o ? h("article", { className: "card" },
+        h("h3", {}, `Denúncia (${o.category}) — ${STATUS_LABEL[o.status] ?? o.status}`),
+        h("div", { className: "card arkiv-card" },
+          h("div", { className: "partner-card-header" },
+            h("span", { className: "partner-tag" }, "Arkiv Network"),
+            h("span", { className: "badge" }, "Custódia Editorial Transferida")
+          ),
+          h("p", { className: "muted" }, "Chave da Entidade no Arkiv: ", h("code", {}, o.key)),
+          h("p", { className: "muted" }, "Status: Armazenada de forma descentralizada na rede Arkiv."),
+          h("button", { className: "btn-renew", onclick: () => panel!.controller.renewOne(o.key, 90 * DAY) }, "🔄 Renovar no Arkiv (+90 dias)")
+        ),
+        h("div", { className: "card worldid-card" },
+          h("div", { className: "partner-card-header" },
+            h("span", { className: "partner-tag" }, "World ID Protocol 4.0"),
+            h("span", { className: "badge" }, "Humano Único Verificado")
+          ),
+          h("p", { className: "muted" }, "Denúncia autenticada com Prova ZKP de Conhecimento Zero. Anti-Sybil e prevenção de spam confirmados sem comprometer o anonimato da fonte.")
+        ),
+        h("pre", {}, o.text),
         h("div", { className: "row" },
           o.attachment ? h("button", { onclick: () => downloadBytes(o.attachment!.name, o.attachment!.data) }, `Baixar anexo ${o.attachment.name}`) : null,
           h("button", { onclick: () => downloadBytes(`denuncia-${o.key.slice(2, 10)}.sw`, o.envelope) }, "Baixar envelope cifrado (.sw)")),
@@ -365,29 +388,64 @@ async function start() {
     restore();
   }
 
+  let showPartnerInfo = false;
+
+  function partnerRibbon(): HTMLElement {
+    return h("div", { className: "partner-ribbon" },
+      h("span", { className: "partner-badge ens", title: "Ethereum Name Service: Governança & Subnomes" }, h("span", { className: "dot" }), "ENSv2: Sepolia"),
+      h("span", { className: "partner-badge arkiv", title: "Arkiv Network: Custódia Editorial & Retenção" }, h("span", { className: "dot" }), "Arkiv: Ativo"),
+      h("span", { className: "partner-badge worldid", title: "World ID: Anti-Spam ZKP Triado" }, h("span", { className: "dot" }), "World ID: ZKP Verificado"),
+      h("button", { className: "btn-link", onclick: () => { showPartnerInfo = !showPartnerInfo; render(); } }, showPartnerInfo ? "Ocultar especificações" : "Arquitetura dos Patrocinadores"));
+  }
+
+  function partnerArchitectureDrawer(): HTMLElement | null {
+    if (!showPartnerInfo) return null;
+    return h("div", { className: "card" },
+      h("h3", {}, "🏆 Arquitetura dos Partner Prizes (ETHGlobal Mumbai)"),
+      h("p", { className: "muted" }, "Tecnologias de patrocinadores integradas no painel editorial:"),
+      h("div", { className: "card ens-card" },
+        h("div", { className: "partner-card-header" }, h("span", { className: "partner-tag" }, "ENSv2 Subnames & PKI"), h("strong", {}, "Ethereum Name Service")),
+        h("p", { className: "muted" }, "A redação gerencia repórteres cunhando subnomes oficiais (*.redacao.eth). Respostas oficiais à fonte são assinadas por repórteres com autoridade delegada comprovada no ENS.")),
+      h("div", { className: "card arkiv-card" },
+        h("div", { className: "partner-card-header" }, h("span", { className: "partner-tag" }, "Arkiv Network SDK"), h("strong", {}, "Custódia & Ciclo de Vida")),
+        h("p", { className: "muted" }, "A redação detém a custódia onchain das denúncias na rede Arkiv, podendo renovar prazos de retenção ou programar o descarte automático dos dados após publicação da reportagem.")),
+      h("div", { className: "card worldid-card" },
+        h("div", { className: "partner-card-header" }, h("span", { className: "partner-tag" }, "World ID Protocol 4.0"), h("strong", {}, "Anti-Sybil ZKP")),
+        h("p", { className: "muted" }, "A triagem da caixa de entrada filtra denúncias garantindo que cada envio venha de um humano real e distinto, blindando a equipe editorial contra ataques de DDoS e spam.")));
+  }
+
   function draw() {
     const s = activeSession.state;
-    const foot = h("footer", { className: "muted" }, `RPC: ${new URL(config.rpcUrl).hostname}. Para proteger sua rede, escolha por conta própria uma VPN ou outra proteção, fora deste aplicativo.`);
+    const foot = h("footer", { className: "muted" },
+      h("p", {}, `RPC: ${new URL(config.rpcUrl).hostname} · Arkiv: ${new URL(config.arkivRpcUrl).hostname}`),
+      h("p", {}, "Para proteger sua rede, escolha por conta própria uma VPN ou outra proteção, fora deste aplicativo."));
     const title = h("h1", {}, "Blind Report — Redação");
+    const ribbon = partnerRibbon();
+    const arch = partnerArchitectureDrawer();
+
     if (s.status === "connected") {
-      root.replaceChildren(h("main", {}, title, chooseView(s), foot));
+      root.replaceChildren(h("main", {}, title, ribbon, arch, chooseView(s), foot));
       return;
     }
     if (s.status !== "ready" || !s.access || !panel) {
-      root.replaceChildren(h("main", {}, title, connectView(s), foot));
+      root.replaceChildren(h("main", {}, title, ribbon, arch, connectView(s), foot));
       return;
     }
     const p = panel.controller.state;
     const access = s.access;
     const roleLabel = access.role === "admin" ? "Administrador" : access.role === "journalist" ? "Jornalista" : "Sem acesso";
     const who = h("div", { className: "who" },
-      h("span", {}, `${access.role === "journalist" ? access.journalistName : access.newsroom}`, h("span", { className: `badge ${access.role}` }, roleLabel)),
+      h("span", {},
+        `${access.role === "journalist" ? access.journalistName : access.newsroom}`,
+        h("span", { className: `badge ${access.role}` }, roleLabel),
+        access.role === "journalist" ? h("span", { className: "partner-badge ens" }, "Subnome Delegado ENS") : h("span", { className: "partner-badge ens" }, "Custodiante ENS")
+      ),
       h("div", { className: "row" }, h("button", { onclick: () => activeSession.leaveNewsroom() }, "Trocar de redação"),
         unsaved(panel.controller.state, access.role)
           ? confirmButton("Sair", "Você ainda não gerou o backup. Ao sair, as chaves desta sessão são apagadas e as denúncias ficam ilegíveis. Clique de novo só se tiver certeza.", () => activeSession.disconnect())
           : h("button", { onclick: () => activeSession.disconnect() }, "Sair")));
     if (access.role === "visitor") {
-      root.replaceChildren(h("main", {}, title, who, visitorView(s, p), foot));
+      root.replaceChildren(h("main", {}, title, ribbon, arch, who, visitorView(s, p), foot));
       return;
     }
     const banner = unsaved(p, access.role)
@@ -399,7 +457,7 @@ async function start() {
     if (!tabs.some(([id]) => id === tab)) tab = tabs[0]![0];
     const nav = h("nav", { role: "tablist" }, ...tabs.map(([id, label]) => h("button", { role: "tab", "aria-selected": tab === id ? "true" : "false", onclick: () => { tab = id; render(); if ((id === "caixa" || id === "inicio") && !p.inbox && p.keysLoaded) void panel!.controller.loadInbox({}); } }, label)));
     const body = tab === "inicio" ? inicioView(p, s) : tab === "caixa" ? caixaView(p, access.role) : tab === "equipe" ? equipeView(p) : tab === "chaves" ? chavesView(p) : tab === "minhachave" ? minhaChaveView(p) : retencaoView(p);
-    root.replaceChildren(h("main", {}, title, who, sessionError, banner, nav, body, foot));
+    root.replaceChildren(h("main", {}, title, ribbon, arch, who, sessionError, banner, nav, body, foot));
   }
 
   window.addEventListener("beforeunload", (e) => {

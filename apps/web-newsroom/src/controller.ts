@@ -184,5 +184,10 @@ export function createPanelController(client: Client, opts: { role?: Role } = {}
         for (const s of list) await client.renew(s.key, retentionSeconds);
         return { expiring: [], notice: `${list.length} denúncia(s) renovada(s).` };
       }),
+    renewOne: (key: string, retentionSeconds: number) =>
+      run("renew", async () => {
+        await client.renew(key as `0x${string}`, retentionSeconds);
+        return { notice: `Retenção da denúncia renovada no Arkiv por mais ${Math.round(retentionSeconds / 86400)} dias.` };
+      }),
   };
 }

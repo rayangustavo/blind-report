@@ -44,6 +44,7 @@ import {
   createSubmissionGate,
 } from "@blind-report/worldid-gate";
 
+const BLUE = "\x1b[34m";
 const BOLD = "\x1b[1m";
 const GREEN = "\x1b[32m";
 const CYAN = "\x1b[36m";
@@ -56,6 +57,11 @@ function logStep(step: number, title: string, desc: string) {
   console.log(`${BOLD}${GREEN}[PASSO ${step}] ${title}${RESET}`);
   console.log(`${YELLOW}↳ ${desc}${RESET}`);
   console.log(`${CYAN}───────────────────────────────────────────────────────────────────${RESET}`);
+}
+
+function logPartner(partner: string, track: string, detail: string) {
+  console.log(`  ${BOLD}${MAGENTA}★ [PARTNER PRIZE: ${partner}]${RESET} ${CYAN}(${track})${RESET}`);
+  console.log(`    ${YELLOW}↳ ${detail}${RESET}`);
 }
 
 async function runDemo() {
@@ -84,6 +90,11 @@ async function runDemo() {
   console.log(`Política Editorial:     Categorias: [${newsroomPolicy.categories.join(", ")}]`);
   console.log(`                        Tamanho Máx: ${newsroomPolicy.maxBytes / 1024} KiB`);
   console.log(`                        Aceita Anexos: ${newsroomPolicy.attachments}`);
+  logPartner(
+    "ENSv2",
+    "Decentralized PKI & Discovery",
+    "Chaves assimétricas em text records (denuncia.pubkey) e regras editoriais (denuncia.policy) sem CA centralizada."
+  );
 
   // 2. Composição da Denúncia pela Fonte
   logStep(
@@ -176,6 +187,11 @@ async function runDemo() {
   }
   console.log(`Admissão World ID:      ${GREEN}✓ Prova ZKP Válida! Humano autêntico confirmado.${RESET}`);
   console.log(`Nullifier gravado:      ${nullifier.slice(0, 24)}... (Impede mais de 1 envio por mês)`);
+  logPartner(
+    "World ID",
+    "Proof of Human & Anti-Sybil ZKP",
+    "Ação amarrada (" + expectedAction + ") gera nullifier determinístico sem correlação cruzada nem exposição biométrica."
+  );
 
   // 4. Relayer e Armazenamento no Arkiv
   logStep(
@@ -203,6 +219,11 @@ async function runDemo() {
   console.log(`Entidade gravada:       ${published.key}`);
   console.log(`Partes geradas:         ${published.keys.length}`);
   console.log(`Recibo gerado:          ${GREEN}✓ Entregue à fonte localmente com a chave privada da caixa postal${RESET}`);
+  logPartner(
+    "Arkiv Network",
+    "Decentralized Storage & Custody Transfer",
+    "Envelope persistido de forma imutável com expiração em 90 dias e custódia total transferida à redação."
+  );
 
   // 5. Decifragem pelo Jornalista
   logStep(
@@ -234,6 +255,11 @@ async function runDemo() {
     authorName: "reporter.jornal-livre.eth",
   });
   console.log(`Anotação editorial:     Status alterado para "review" por reporter.jornal-livre.eth`);
+  logPartner(
+    "ENS + Arkiv",
+    "Subnames & Immutable Editorial Auditing",
+    "Anotação de triagem no Arkiv assinada por subnome delegado (reporter.jornal-livre.eth) verificado no ENS."
+  );
 
   // 6. Resposta Segura da Redação
   logStep(
@@ -260,6 +286,11 @@ async function runDemo() {
 
   console.log(`Resposta do repórter:   "${replyText}"`);
   console.log(`Cifragem da resposta:   ${GREEN}✓ Selada para a caixa postal da fonte${RESET}`);
+  logPartner(
+    "Arkiv Network",
+    "Encrypted Anonymous Mailbox",
+    "Canal de retorno bidirecional: resposta selada persistida no Arkiv sem conhecer a identidade ou IP da fonte."
+  );
 
   // 7. Fonte Lê a Resposta com seu Recibo
   logStep(
@@ -295,7 +326,24 @@ async function runDemo() {
   console.log(`Garantia:               A fonte prova matematicamente que conhecia o sal e o texto original`);
   console.log(`                        sem que ninguém antes pudesse deduzir sua identidade!`);
 
-  console.log(`\n${BOLD}${GREEN}===================================================================`);
+  console.log(`\n${BOLD}${MAGENTA}===================================================================`);
+  console.log(`       🏆 ETHGLOBAL MUMBAI — RESUMO DAS TECNOLOGIAS EM AÇÃO         `);
+  console.log(`===================================================================${RESET}`);
+  console.log(` ${BOLD}1. ENSv2 (Ethereum Name Service):${RESET}`);
+  console.log(`    ${GREEN}✓ PKI Descentralizada:${RESET} Text records denuncia.pubkey e denuncia.policy`);
+  console.log(`    ${GREEN}✓ Subnomes Delegados:${RESET} reporter.jornal-livre.eth com autoridade verificada`);
+  console.log(` ${BOLD}2. Arkiv Network (@arkiv-network/sdk):${RESET}`);
+  console.log(`    ${GREEN}✓ Persistência Imutável:${RESET} Entidade ${published.key.slice(0, 22)}...`);
+  console.log(`    ${GREEN}✓ Transferência de Custódia:${RESET} Relayer -> Redação (${published.key.slice(0, 10)}...)`);
+  console.log(`    ${GREEN}✓ Ciclo de Vida & Retenção:${RESET} 90 dias com renovação permitida`);
+  console.log(`    ${GREEN}✓ Caixa Postal Segura:${RESET} Respostas seladas recuperadas pela fonte`);
+  console.log(` ${BOLD}3. World ID (Worldcoin Protocol 4.0):${RESET}`);
+  console.log(`    ${GREEN}✓ ZKP Proof of Human:${RESET} Ação ${expectedAction}`);
+  console.log(`    ${GREEN}✓ Mitigação Anti-Sybil:${RESET} Nullifier ${nullifier.slice(0, 22)}... (1 envio/mês)`);
+  console.log(`    ${GREEN}✓ Privacidade Absoluta:${RESET} Nenhuma identidade civil ou biometria exposta`);
+  console.log(`${BOLD}${MAGENTA}===================================================================${RESET}\n`);
+
+  console.log(`${BOLD}${GREEN}===================================================================`);
   console.log(`    TODOS OS TESTES E ETAPAS DO PROTOCOLO FORAM CONCLUÍDOS COM 100% DE SUCESSO!`);
   console.log(`===================================================================${RESET}\n`);
 }
