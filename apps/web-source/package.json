@@ -1,0 +1,19 @@
+{
+  "name": "@blind-report/web-source",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node --import tsx build.mjs"
+  },
+  "dependencies": {
+    "@blind-report/source-client": "*",
+    "@blind-report/core": "*",
+    "@blind-report/ens-client": "*",
+    "@blind-report/arkiv-store": "*",
+    "@blind-report/network-policy": "*",
+    "@arkiv-network/sdk": "^1.0.0",
+    "viem": "^2.38.0"
+  }
+}

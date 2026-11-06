@@ -1,0 +1,17 @@
+{
+  "name": "@blind-report/web-newsroom",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": { "build": "node --import tsx build.mjs" },
+  "dependencies": {
+    "@arkiv-network/sdk": "^1.0.0",
+    "@blind-report/arkiv-store": "*",
+    "@blind-report/core": "*",
+    "@blind-report/ens-client": "*",
+    "@blind-report/network-policy": "*",
+    "@blind-report/newsroom-client": "*",
+    "viem": "^2.38.0"
+  }
+}
