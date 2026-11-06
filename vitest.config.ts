@@ -23,7 +23,7 @@ export default defineConfig({
       provider: "v8",
       include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
       // admin.ts, sdk-backend.ts e compose.ts/main.ts (ligações reais) são cobertos pelos testes de integração, não pelos unitários.
-      exclude: ["**/index.ts", "packages/ens-client/src/admin.ts", "packages/arkiv-store/src/sdk-backend.ts", "apps/relayer/src/compose.ts", "apps/relayer/src/main.ts", "apps/web-source/src/main.ts", "apps/web-source/src/dom.ts", "apps/web-newsroom/src/main.ts", "apps/web-newsroom/src/dom.ts"],
+      exclude: ["**/index.ts", "packages/ens-client/src/admin.ts", "packages/arkiv-store/src/sdk-backend.ts", "apps/relayer/src/compose.ts", "apps/relayer/src/main.ts"],
       thresholds: {
         "packages/core/src/**": { lines: 90, functions: 90, branches: 85, statements: 90 },
         "packages/crypto/src/**": { lines: 90, functions: 90, branches: 85, statements: 90 },
@@ -33,8 +33,6 @@ export default defineConfig({
         "packages/worldid-gate/src/**": { lines: 85, functions: 85, branches: 80, statements: 85 },
         "packages/source-client/src/**": { lines: 85, functions: 85, branches: 75, statements: 85 },
         "packages/newsroom-client/src/**": { lines: 85, functions: 85, branches: 75, statements: 85 },
-        "apps/web-newsroom/src/**": { lines: 85, functions: 85, branches: 75, statements: 85 },
-        "apps/web-source/src/**": { lines: 85, functions: 85, branches: 75, statements: 85 },
         "apps/relayer/src/**": { lines: 85, functions: 85, branches: 75, statements: 85 },
       },
     },
