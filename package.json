@@ -1,0 +1,1 @@
+{"name":"blind-report","version":"0.1.0","private":true,"scripts":{"dev":"npx -y http-server src","lint":"echo "no lint configured"","test":"echo "no tests yet""}}
