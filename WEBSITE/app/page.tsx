@@ -1149,6 +1149,32 @@ export function EditorialDesk({
                         <ShieldCheck size={14} /> Decrypted Content (Libsodium X25519)
                       </div>
                       <p className="text-sm text-gray-200 leading-relaxed">{selectedReport.text}</p>
+                      
+                      {selectedReport.attachment && (
+                        <div className="mt-3 pt-3 border-t border-emerald-800/40 flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs text-emerald-300">
+                            <Paperclip size={14} />
+                            <span><strong>Attached File:</strong> {selectedReport.attachment.name}</span>
+                          </div>
+                          {selectedReport.attachment.bytes && (
+                            <button
+                              type="button"
+                              className="text-xs text-amber-400 hover:underline flex items-center gap-1 font-medium"
+                              onClick={() => {
+                                const blob = new Blob([selectedReport.attachment!.bytes!], { type: selectedReport.attachment?.mimeType || 'application/octet-stream' })
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = url
+                                a.download = selectedReport.attachment!.name
+                                a.click()
+                                URL.revokeObjectURL(url)
+                              }}
+                            >
+                              <Download size={12} /> Download attachment
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="mb-4">
@@ -1164,6 +1190,22 @@ export function EditorialDesk({
                       </button>
                     </div>
                   )}
+
+                  {/* ON-CHAIN ARKIV PROOF & VERIFICATION CARD */}
+                  <div className="p-3 bg-[#081412] border border-[#1d3d34] rounded mb-4 text-xs font-mono">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-gray-300 flex items-center gap-1">
+                        <ShieldCheck size={13} className="text-amber-400" /> Arkiv On-Chain Proof
+                      </span>
+                      <span className="text-emerald-400 font-sans text-[11px] font-semibold">Immutable & Block-Expiring</span>
+                    </div>
+                    <div className="text-gray-400 truncate">
+                      <strong className="text-gray-300">Arkiv Key:</strong> {selectedReport.receiptKey ?? '0x...'}
+                    </div>
+                    <div className="text-gray-400 truncate mt-1">
+                      <strong className="text-gray-300">Content Hash:</strong> {selectedReport.contentHash ?? '0x...'}
+                    </div>
+                  </div>
 
                   {/* INTERNAL NOTES */}
                   <div className="detail-note">

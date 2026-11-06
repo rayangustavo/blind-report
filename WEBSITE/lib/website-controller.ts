@@ -829,21 +829,28 @@ export function createWebsiteController(
       set({ busy: true, error: null })
       try {
         let text = selected.text ?? 'Confidential tip content decrypted successfully.'
+        let attachment = selected.attachment
 
         if (deps.newsroomClient?.decrypt && selected.rawItem) {
           const dec = await deps.newsroomClient.decrypt(selected.rawItem)
           text = dec.text
+          if (dec.attachment) {
+            attachment = { name: dec.attachment.name, bytes: dec.attachment.data }
+          }
         } else if (selected.rawEnvelope) {
           const env = decodeEnvelope(selected.rawEnvelope)
           const decBytes = open(env, 'redacao', internalKeypair)
           const p = decodePayload(decBytes)
           text = p.text
+          if (p.attachment) {
+            attachment = { name: p.attachment.name, bytes: p.attachment.data }
+          }
         }
 
         const updated = state.reports.map((r) =>
-          r.id === selected.id ? { ...r, decrypted: true, text } : r
+          r.id === selected.id ? { ...r, decrypted: true, text, attachment } : r
         )
-        const updatedSelected = { ...selected, decrypted: true, text }
+        const updatedSelected = { ...selected, decrypted: true, text, attachment }
 
         set({
           busy: false,
@@ -1022,6 +1029,7 @@ export function createWebsiteController(
           priority: 'High',
           initials: state.selectedCategory.slice(0, 2).toUpperCase(),
           text: state.message,
+          attachment: state.attachment ? { ...state.attachment } : undefined,
           decrypted: false,
           receiptKey,
           rawEnvelope: rawEnv,
