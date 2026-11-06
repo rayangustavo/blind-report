@@ -1,0 +1,47 @@
+[
+  {
+    "type": "function",
+    "name": "owner",
+    "stateMutability": "view",
+    "inputs": [{ "name": "node", "type": "bytes32" }],
+    "outputs": [{ "name": "", "type": "address" }]
+  },
+  {
+    "type": "function",
+    "name": "resolver",
+    "stateMutability": "view",
+    "inputs": [{ "name": "node", "type": "bytes32" }],
+    "outputs": [{ "name": "", "type": "address" }]
+  },
+  {
+    "type": "function",
+    "name": "setResolver",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "node", "type": "bytes32" },
+      { "name": "resolver", "type": "address" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "setSubnodeOwner",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "parent", "type": "bytes32" },
+      { "name": "label", "type": "bytes32" },
+      { "name": "owner", "type": "address" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "deleteSubnode",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "parent", "type": "bytes32" },
+      { "name": "label", "type": "bytes32" }
+    ],
+    "outputs": []
+  }
+]

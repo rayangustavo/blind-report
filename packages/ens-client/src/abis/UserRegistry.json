@@ -1,0 +1,30 @@
+[
+  {
+    "type": "function",
+    "name": "owner",
+    "stateMutability": "view",
+    "inputs": [{ "name": "node", "type": "bytes32" }],
+    "outputs": [{ "name": "", "type": "address" }]
+  },
+  {
+    "type": "function",
+    "name": "setSubnodeOwner",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "parent", "type": "bytes32" },
+      { "name": "label", "type": "bytes32" },
+      { "name": "owner", "type": "address" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "deleteSubnode",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "parent", "type": "bytes32" },
+      { "name": "label", "type": "bytes32" }
+    ],
+    "outputs": []
+  }
+]
