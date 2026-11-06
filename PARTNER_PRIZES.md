@@ -119,3 +119,27 @@ npm run dev:all
 ```
 - Acesse `http://localhost:5173` para o portal da fonte anônima (com ribbon e cards de ENS, World ID e Arkiv).
 - Acesse `http://localhost:5174` para o painel editorial dos jornalistas (com gerenciamento de custódia Arkiv e subnomes ENS).
+
+---
+
+## 🌐 Execução On-Chain Completa na Rede Sepolia (Testnet)
+
+Para demonstrar a interoperabilidade e a prontidão para produção das tecnologias de parceiros, o repositório inclui um script que executa todas as etapas do protocolo com transações **reais transmitidas e confirmadas on-chain** no Ethereum Sepolia:
+
+```bash
+npm run test:sepolia:flow
+```
+
+### O que é executado on-chain:
+1. **Deploy de Resolver Proxy** via `VerifiableFactory` na Sepolia.
+2. **Commitment** do nome da redação no `EthRegistrar` com janela de maturação.
+3. **Mint & Approve de MockUSDC** para pagamento de taxas de registro ENSv2.
+4. **Registro definitivo do nome `.eth`** na Sepolia.
+5. **Gravação multicall de Text Records** criptográficos (`denuncia.pubkey`, `denuncia.policy`, `denuncia.custodian`).
+6. **Deploy de Subregistry** (`UserRegistry`) para gestão de jornalistas.
+7. **Delegação on-chain de subnome** (`reporter.<redacao>.eth`) com chave pública de leitura (`denuncia.reader`).
+8. **Descoberta descentralizada** via `UniversalResolver` da Sepolia.
+9. **Mitigação Sybil ZKP** com protocolo World ID v4.
+10. **Persistência de envelope cifrado e transferência de custódia** no Arkiv.
+11. **Triagem editorial, resposta selada e comprovação matemática de autoria**.
+
