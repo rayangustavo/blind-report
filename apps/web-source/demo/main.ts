@@ -23,36 +23,6 @@ function parseRoute(): Route {
 }
 const routeHref = (route: Route) => (route === "inicio" ? "#/" : `#/${route}`);
 
-type Region = { lat: number; lon: number };
-const REGIONS: Record<string, Record<string, Region>> = {
-  Brasil: {
-    "São Paulo": { lat: -23.55, lon: -46.63 },
-    "Rio de Janeiro": { lat: -22.91, lon: -43.17 },
-    Brasília: { lat: -15.79, lon: -47.88 },
-    Recife: { lat: -8.05, lon: -34.88 },
-    "Porto Alegre": { lat: -30.03, lon: -51.23 },
-  },
-  Portugal: { Lisboa: { lat: 38.72, lon: -9.14 }, Porto: { lat: 41.15, lon: -8.61 } },
-  "Estados Unidos": {
-    Washington: { lat: 38.9, lon: -77.03 },
-    "Nova York": { lat: 40.71, lon: -74.0 },
-    "Los Angeles": { lat: 34.05, lon: -118.24 },
-  },
-  "Reino Unido": { Londres: { lat: 51.51, lon: -0.13 }, Manchester: { lat: 53.48, lon: -2.24 } },
-  Argentina: { "Buenos Aires": { lat: -34.6, lon: -58.38 }, Córdoba: { lat: -31.42, lon: -64.18 } },
-  México: { "Cidade do México": { lat: 19.43, lon: -99.13 }, Monterrey: { lat: 25.69, lon: -100.32 } },
-  Angola: { Luanda: { lat: -8.84, lon: 13.23 } },
-  Moçambique: { Maputo: { lat: -25.97, lon: 32.57 } },
-  Alemanha: { Berlim: { lat: 52.52, lon: 13.4 }, Munique: { lat: 48.14, lon: 11.58 } },
-  França: { Paris: { lat: 48.86, lon: 2.35 }, Marselha: { lat: 43.3, lon: 5.37 } },
-  Índia: { "Nova Délhi": { lat: 28.61, lon: 77.21 }, Mumbai: { lat: 19.08, lon: 72.88 } },
-  Japão: { Tóquio: { lat: 35.68, lon: 139.69 }, Osaka: { lat: 34.69, lon: 135.5 } },
-  "África do Sul": { Joanesburgo: { lat: -26.2, lon: 28.05 }, "Cidade do Cabo": { lat: -33.92, lon: 18.42 } },
-};
-let regionCountry = "Brasil";
-let regionCity = "São Paulo";
-const currentRegion = (): Region => REGIONS[regionCountry]?.[regionCity] ?? REGIONS.Brasil["São Paulo"];
-
 const SVG_NS = "http://www.w3.org/2000/svg";
 const bytes = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 7 + 11) % 256);
 const NEWSROOM = {
@@ -188,58 +158,6 @@ function specter(className = "specter"): SVGElement {
     svgEl("path", { d: "M29 41.5c2.3 2.2 5.7 2.2 8 0", stroke: "rgba(7,16,31,0.72)", "stroke-width": "1.8", "stroke-linecap": "round" }),
     svgEl("ellipse", { cx: "18", cy: "38", rx: "3.4", ry: "2", fill: "rgba(255,140,210,0.28)" }),
     svgEl("ellipse", { cx: "48", cy: "38", rx: "3.4", ry: "2", fill: "rgba(255,140,210,0.28)" }),
-  );
-}
-
-function instruments(initialCount: number): HTMLElement {
-  const r = currentRegion();
-  const countLabel = `${initialCount} ${initialCount === 1 ? "caractere" : "caracteres"} · só neste aparelho`;
-  return h(
-    "aside",
-    { className: "desk-side", "aria-label": "Instrumentos locais" },
-    h(
-      "div",
-      { className: "instrument", "data-reveal": "" },
-      h(
-        "header",
-        { className: "instrument-head" },
-        h("span", { className: "instrument-icon" }, icon("key")),
-        h("div", {}, h("strong", {}, "Teclado local"), h("span", {}, "cada tecla é processada aqui")),
-        h("span", { className: "instrument-tag" }, "local"),
-      ),
-      h("canvas", { className: "keyboard-field", "aria-hidden": "true" }),
-      h("div", { className: "instrument-foot" }, h("span", { className: "pulse-dot", "aria-hidden": "true" }), h("span", { className: "keyboard-count" }, countLabel)),
-    ),
-    h(
-      "div",
-      { className: "instrument", "data-reveal": "" },
-      h(
-        "header",
-        { className: "instrument-head" },
-        h("span", { className: "instrument-icon" }, icon("pin")),
-        h("div", {}, h("strong", {}, "Região do relato"), h("span", {}, "contexto, não identidade")),
-        h("span", { className: "instrument-tag accent" }, "pin"),
-      ),
-      h("canvas", {
-        className: "region-field",
-        "data-lat": String(r.lat),
-        "data-lon": String(r.lon),
-        "aria-hidden": "true",
-      }),
-      h(
-        "div",
-        { className: "region-meta" },
-        h("div", {}, h("strong", { className: "region-name" }, `${regionCountry} · ${regionCity}`), h("span", { className: "region-coords" }, `${r.lat.toFixed(2)}°, ${r.lon.toFixed(2)}°`)),
-        h("span", { className: "region-note" }, "ponto arredondado"),
-      ),
-    ),
-    h(
-      "div",
-      { className: "instrument instrument-mini", "data-reveal": "" },
-      h("div", { className: "mini-row" }, icon("lock"), h("span", {}, "0 bytes saíram deste aparelho")),
-      h("div", { className: "mini-row" }, icon("eyeOff"), h("span", {}, "Nenhum IP registrado")),
-      h("div", { className: "mini-row" }, icon("key"), h("span", {}, "Chave de leitura só no recibo")),
-    ),
   );
 }
 
@@ -430,31 +348,6 @@ async function start() {
       });
       const file = h("input", { type: "file", id: "file" }) as HTMLInputElement;
 
-      if (!REGIONS[regionCountry]?.[regionCity]) {
-        regionCountry = "Brasil";
-        regionCity = "São Paulo";
-      }
-      const country = h("select", { id: "reg-country" }, ...Object.keys(REGIONS).map((c) => h("option", { value: c }, c))) as HTMLSelectElement;
-      country.value = regionCountry;
-      const cityOf = (name: string) => Object.keys(REGIONS[name] ?? REGIONS.Brasil);
-      const city = h("select", { id: "reg-city" }, ...cityOf(regionCountry).map((c) => h("option", { value: c }, c))) as HTMLSelectElement;
-      city.value = regionCity;
-      const emitRegion = () => {
-        const place = currentRegion();
-        window.dispatchEvent(new CustomEvent("br:region", { detail: { country: regionCountry, city: regionCity, lat: place.lat, lon: place.lon } }));
-      };
-      country.addEventListener("change", () => {
-        regionCountry = country.value;
-        const cities = cityOf(regionCountry);
-        if (!cities.includes(regionCity)) regionCity = cities[0];
-        city.replaceChildren(...cities.map((c) => h("option", { value: c }, c)));
-        city.value = regionCity;
-        emitRegion();
-      });
-      city.addEventListener("change", () => {
-        regionCity = city.value;
-        emitRegion();
-      });
       return h(
         "section",
         { className: "panel" },
@@ -465,18 +358,6 @@ async function start() {
         err(s),
         field("Categoria", "cat", cat),
         field("Texto", "txt", text),
-        h(
-          "div",
-          { className: "region-fields" },
-          h(
-            "div",
-            { className: "region-fields-head" },
-            h("span", { className: "region-fields-title" }, icon("pin"), "Onde acontece?"),
-            h("span", { className: "region-optional" }, "opcional"),
-          ),
-          h("div", { className: "region-selects" }, field("País", "reg-country", country), field("Cidade", "reg-city", city)),
-          h("p", { className: "hint region-hint-inline" }, icon("shield"), h("span", {}, "O ponto no mapa é arredondado e não identifica endereço. Serve só para dar contexto.")),
-        ),
         n.attachments ? field("Anexo (opcional)", "file", file) : null,
         h("p", { className: "hint" }, icon("lock"), h("span", {}, "Seu texto é cifrado neste aparelho antes de sair. Só a redação consegue abri-lo.")),
         h(
@@ -1378,7 +1259,7 @@ async function start() {
   function denunciaHero(s: SourceState): HTMLElement {
     const copy =
       s.step === "compose"
-        ? { eyebrow: "Passo 2 · Relato", lead: "Escreva.", accent: "Nós ciframos." , lede: "O texto é cifrado neste aparelho antes de sair. Use o teclado ao lado para acompanhar: cada tecla fica aqui." }
+        ? { eyebrow: "Passo 2 · Relato", lead: "Escreva.", accent: "Nós ciframos." , lede: "O texto é cifrado neste aparelho antes de sair. Nada é enviado enquanto você escreve." }
         : s.step === "proof"
           ? { eyebrow: "Passo 3 · Humanidade", lead: "Prove sem se", accent: "identificar.", lede: "A prova de humanidade impede spam sem revelar quem você é." }
           : s.step === "receipt"
@@ -1645,15 +1526,7 @@ async function start() {
     let main: HTMLElement;
     if (route === "inicio") {
       const body = viewSend(s);
-      const active = s.step === "newsroom" || s.step === "compose";
-      const stage = active
-        ? h(
-            "div",
-            { className: "desk" },
-            h("div", { className: "desk-main", "data-reveal": "" }, body),
-            instruments(draftText.length),
-          )
-        : h("div", { className: "desk desk-single" }, h("div", { className: "desk-main" }, body));
+      const stage = h("div", { className: "desk desk-single" }, h("div", { className: "desk-main" }, body));
       main = h(
         "main",
         { id: "conteudo" },

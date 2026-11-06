@@ -1969,49 +1969,9 @@ a.brand, a.nav-tab, a.nav-cta, a.btn, .report-subnav-link, .footer-nav a { text-
 .report-subnav-link.is-active { color: #fff; background: rgba(255, 255, 255, 0.075); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
 .report-subnav-link.is-active svg { color: var(--accent); }
 .denuncia-stage { margin-top: 1.15rem; scroll-margin-top: 7rem; }
-.desk { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; align-items: start; }
-.desk-single { display: block; }
+.desk { display: block; }
 .desk-main { min-width: 0; }
 .desk-main .panel { margin: 0; }
-.desk-side { position: sticky; top: 7.2rem; display: flex; flex-direction: column; gap: 1rem; }
-.instrument {
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 0.9rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 20px 50px rgba(0, 0, 0, 0.32);
-}
-.instrument-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.7rem; }
-.instrument-icon { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 1px solid rgba(255, 255, 255, 0.11); border-radius: 10px; color: #b6c8ff; background: rgba(255, 255, 255, 0.045); }
-.instrument-icon svg { width: 16px; height: 16px; }
-.instrument-head strong { display: block; color: #e8eeff; font-size: 0.78rem; letter-spacing: -0.01em; }
-.instrument-head div > span { color: #7f8cb0; font-size: 0.62rem; }
-.instrument-tag { margin-left: auto; padding: 0.3rem 0.5rem; border: 1px solid rgba(255, 255, 255, 0.11); border-radius: 999px; color: #9fb3e0; font: 700 0.54rem/1 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; }
-.instrument-tag.accent { color: #7ff0dc; border-color: rgba(56, 224, 200, 0.32); background: rgba(56, 224, 200, 0.08); }
-.keyboard-field, .region-field { display: block; width: 100%; height: 182px; border-radius: 14px; background: radial-gradient(80% 80% at 50% 40%, rgba(122, 162, 255, 0.08), transparent 70%); }
-.region-field { background: radial-gradient(80% 80% at 50% 45%, rgba(56, 224, 200, 0.07), transparent 70%); }
-.instrument-foot { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.6rem; color: #8f9cbe; font: 600 0.61rem/1.3 var(--mono); }
-.instrument-foot .pulse-dot { width: 6px; height: 6px; background: var(--accent-3); animation: none; box-shadow: 0 0 9px var(--accent-3); }
-.region-meta { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.6rem; margin-top: 0.65rem; }
-.region-name { display: block; color: #e8eeff; font-size: 0.76rem; letter-spacing: -0.01em; }
-.region-coords { color: #7f8cb0; font: 0.59rem/1.4 var(--mono); }
-.region-note { padding: 0.28rem 0.48rem; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 999px; color: #7f8cb0; font: 600 0.53rem/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
-.instrument-mini { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.8rem 0.9rem; }
-.mini-row { display: flex; align-items: center; gap: 0.5rem; color: #9aa7c9; font-size: 0.67rem; }
-.mini-row svg { width: 13px; height: 13px; flex: none; color: var(--accent-3); }
-
-/* ---------- campos de região no formulário ---------- */
-.region-fields { margin: 1.1rem 0; padding: 0.95rem; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 18px; background: rgba(255, 255, 255, 0.022); }
-.region-fields-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.7rem; }
-.region-fields-title { display: inline-flex; align-items: center; gap: 0.45rem; color: #c8d4f2; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.02em; }
-.region-fields-title svg { width: 15px; height: 15px; color: var(--accent-3); }
-.region-optional { padding: 0.26rem 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 999px; color: #7f8cb0; font: 700 0.52rem/1 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; }
-.region-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
-.region-fields .field { margin: 0; }
-.region-hint-inline { margin: 0.7rem 0 0; font-size: 0.72rem; }
-.region-hint-inline svg { width: 14px; height: 14px; }
 
 /* ---------- links de recibo ---------- */
 .receipt-links {
@@ -2060,9 +2020,6 @@ a.brand, a.nav-tab, a.nav-cta, a.btn, .report-subnav-link, .footer-nav a { text-
   .lattice-visual { max-width: 620px; }
   .no-trace-art { order: -1; }
   .blocked-net { max-width: 380px; }
-  .desk { grid-template-columns: 1fr; }
-  .desk-side { position: static; display: grid; grid-template-columns: 1fr 1fr; }
-  .instrument-mini { grid-column: 1 / -1; }
   .receipt-links { grid-template-columns: 1fr; }
   .cta-band { margin-top: 3.4rem; }
 }
@@ -2085,14 +2042,9 @@ a.brand, a.nav-tab, a.nav-cta, a.btn, .report-subnav-link, .footer-nav a { text-
   .report-subnav { display: flex; width: 100%; justify-content: space-between; }
   .report-subnav-link { flex: 1; justify-content: center; padding: 0.5rem 0.4rem; font-size: 0.72rem; }
   .report-subnav-link svg { width: 14px; height: 14px; }
-  .desk-side { grid-template-columns: 1fr; }
-  .instrument-mini { grid-column: auto; }
-  .keyboard-field, .region-field { height: 168px; }
   .receipt-links-actions .btn { width: 100%; }
 }
 @media (max-width: 520px) {
-  .region-selects { grid-template-columns: 1fr; }
-  .region-fields { padding: 0.8rem; }
   .sec-art { min-height: 260px; }
   .specter-chip-a { right: 4%; }
   .specter-chip-c { display: none; }
