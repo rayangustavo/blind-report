@@ -95,5 +95,10 @@ export function useWebsiteController(initialDeps?: WebsiteDeps, options?: Contro
     verifyAuthorship: controller.verifyAuthorship.bind(controller),
     checkRelayerHealth: controller.checkRelayerHealth.bind(controller),
     setRelayerUrl: controller.setRelayerUrl.bind(controller),
+
+    // World ID Verification & Simulator
+    openWorldIdVerification: controller.openWorldIdVerification.bind(controller),
+    closeWorldIdModal: controller.closeWorldIdModal.bind(controller),
+    simulateWorldIdApproval: controller.simulateWorldIdApproval.bind(controller),
   }
 }

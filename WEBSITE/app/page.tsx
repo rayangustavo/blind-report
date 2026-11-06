@@ -38,6 +38,7 @@ import { RelayerStatusBadge } from '../components/relayer-status'
 import { ProductionEvaluatorCallout } from '../components/production-evaluator-callout'
 import { MetaMaskModal } from '../components/metamask-modal'
 import { OnChainTxBadge } from '../components/onchain-tx-badge'
+import { WorldIdModal } from '../components/worldid-modal'
 
 export function Logo() {
   return (
@@ -93,6 +94,9 @@ export default function App() {
     submitReport,
     readRepliesWithReceipt,
     verifyAuthorship,
+    openWorldIdVerification,
+    closeWorldIdModal,
+    simulateWorldIdApproval,
   } = useWebsiteController(undefined, { mode: 'production' })
 
   const [verifyText, setVerifyText] = useState('')
@@ -387,9 +391,12 @@ export default function App() {
           setAttachment={setAttachment}
           receipt={state.receipt}
           onSubmit={submitReport}
+          onVerifyWorldId={openWorldIdVerification}
           busy={state.busy}
           onBack={() => navigate('home')}
           onCheckReplies={() => navigate('replies')}
+          isDemo={false}
+          zkpProofGenerated={state.zkpProofGenerated}
         />
       )}
 
@@ -465,6 +472,17 @@ export default function App() {
       {/* MODAL ORIENTATIVO DE METAMASK EM PRODUÇÃO */}
       <MetaMaskModal isOpen={metaMaskModalOpen} onClose={() => setMetaMaskModalOpen(false)} />
 
+      {/* WORLD ID PROOF OF HUMANITY MODAL (WORLDCOIN SIMULATOR INTEGRATION) */}
+      <WorldIdModal
+        isOpen={state.worldIdModalOpen}
+        onClose={closeWorldIdModal}
+        connectorUri={state.worldIdConnectorUri}
+        action={state.worldIdAction ?? `submit:${state.selectedNewsroom}:202611`}
+        status={state.worldIdStatus}
+        error={state.worldIdError}
+        onSimulateApprove={simulateWorldIdApproval}
+      />
+
       {/* FOOTER */}
       <footer className="site-footer">
         <Logo />
@@ -491,6 +509,7 @@ export function ReportFlow({
   setAttachment,
   receipt,
   onSubmit,
+  onVerifyWorldId,
   busy,
   onBack,
   onCheckReplies,
@@ -651,7 +670,11 @@ export function ReportFlow({
                 className="primary-button"
                 disabled={busy || !category || message.length < 10}
                 onClick={async () => {
-                  await onSubmit()
+                  if (onVerifyWorldId && !zkpProofGenerated && !isDemo) {
+                    await onVerifyWorldId()
+                  } else {
+                    await onSubmit()
+                  }
                 }}
               >
                 {busy ? 'Encrypting & Generating ZKP...' : 'Verify and submit'} <ArrowRight size={17} />

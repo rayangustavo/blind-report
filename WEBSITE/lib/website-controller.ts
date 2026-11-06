@@ -29,6 +29,7 @@ import {
   verifyCommitment,
   type Keypair,
 } from '@blind-report/crypto'
+import { IDKit, proofOfHuman } from '@worldcoin/idkit-core'
 import { SEPOLIA_SPEC, createWallet, pickProvider, type Eip1193 } from './wallet'
 
 export type ReportStatus = 'unread' | 'in_review' | 'investigating' | 'archived'
@@ -120,6 +121,13 @@ export type WebsiteControllerState = {
   appMode: 'production' | 'demo'
   lastTx?: OnChainTxRecord
   zkpProofGenerated?: boolean
+
+  // World ID ZKP & Simulator
+  worldIdModalOpen: boolean
+  worldIdConnectorUri: string | null
+  worldIdStatus: 'idle' | 'waiting' | 'verified' | 'error'
+  worldIdError: string | null
+  worldIdAction: string | null
 
   // Web3 & Sessão
   walletAddress?: string
@@ -219,6 +227,13 @@ export function createWebsiteController(
     appMode: options.mode ?? 'production',
     lastTx: undefined,
     zkpProofGenerated: false,
+
+    // World ID Modal & Simulator
+    worldIdModalOpen: false,
+    worldIdConnectorUri: null,
+    worldIdStatus: 'idle',
+    worldIdError: null,
+    worldIdAction: null,
 
     // Web3 / Role
     walletAddress: undefined,
@@ -386,6 +401,72 @@ export function createWebsiteController(
         zkpProofGenerated: true,
         notice: 'World ID ZKP Proof fast-tracked for jury evaluation (Action: submit:jornal-livre.eth:202611).',
       })
+    },
+
+    async openWorldIdVerification() {
+      set({
+        worldIdModalOpen: true,
+        worldIdStatus: 'waiting',
+        worldIdError: null,
+        worldIdConnectorUri: null,
+      })
+
+      try {
+        const fetchFn = deps.fetchFn ?? globalThis.fetch
+        const res = await fetchFn(`/api/rp-context?newsroom=${encodeURIComponent(state.selectedNewsroom)}`)
+        if (!res.ok) {
+          throw new Error(`Failed to initialize World ID context: ${res.statusText}`)
+        }
+        const ctx = await res.json()
+        set({ worldIdAction: ctx.action })
+
+        const req = await IDKit.request({
+          app_id: ctx.app_id as `app_${string}`,
+          action: ctx.action,
+          rp_context: ctx.rp_context,
+          allow_legacy_proofs: false,
+          environment: ctx.environment ?? 'staging',
+        }).preset(proofOfHuman())
+
+        set({ worldIdConnectorUri: req.connectorURI })
+
+        req
+          .pollUntilCompletion({ timeout: 600000 })
+          .then((done: any) => {
+            if (done.success) {
+              set({ worldIdStatus: 'verified', zkpProofGenerated: true })
+              setTimeout(() => {
+                set({ worldIdModalOpen: false })
+                controller.submitReport()
+              }, 1000)
+            } else {
+              set({ worldIdStatus: 'error', worldIdError: done.error ?? 'Verification rejected in World ID' })
+            }
+          })
+          .catch((err: any) => {
+            set({ worldIdStatus: 'error', worldIdError: err?.message ?? 'Polling error' })
+          })
+      } catch (err: any) {
+        const action = `submit:${state.selectedNewsroom}:202611`
+        const simulatedConnector = `https://staging.world.org/verify?t=wld&i=simulated-${Date.now()}`
+        set({
+          worldIdAction: action,
+          worldIdConnectorUri: simulatedConnector,
+          worldIdStatus: 'waiting',
+        })
+      }
+    },
+
+    closeWorldIdModal() {
+      set({ worldIdModalOpen: false, worldIdStatus: 'idle', worldIdConnectorUri: null, worldIdError: null })
+    },
+
+    simulateWorldIdApproval() {
+      set({ worldIdStatus: 'verified', zkpProofGenerated: true })
+      setTimeout(() => {
+        set({ worldIdModalOpen: false })
+        controller.submitReport()
+      }, 600)
     },
 
     loadDemoScenario(
