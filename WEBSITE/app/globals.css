@@ -538,7 +538,125 @@ button { cursor: pointer; }
   justify-content: center;
 }
 
+/* =========================================================================
+   DEMO TOP BAR (SIMPLIFIED & MINIMALIST)
+   ========================================================================= */
+.demo-top-bar {
+  width: 100%;
+  background: #081412;
+  border-bottom: 1px solid #1a332c;
+  font-size: 12px;
+  position: relative;
+  z-index: 50;
+}
+.demo-top-bar-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 6px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.demo-top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.demo-top-bar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(239, 182, 75, 0.12);
+  border: 1px solid rgba(239, 182, 75, 0.35);
+  color: #efb64b;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.demo-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #efb64b;
+  box-shadow: 0 0 8px #efb64b;
+  animation: pulse 2s infinite ease-in-out;
+}
+.demo-top-bar-sep {
+  color: #3b5f54;
+}
+.demo-network-tag {
+  color: #8ebbad;
+  font-family: monospace;
+  font-size: 11px;
+}
+.demo-role-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.demo-roles-label {
+  color: #6d988b;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+.demo-role-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #0d201c;
+  border: 1px solid #20443a;
+  color: #a4c9be;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.demo-role-btn:hover {
+  background: #142e28;
+  color: #f2f7f5;
+  border-color: #366d5e;
+}
+.demo-role-btn.active {
+  background: #1b3d35;
+  border-color: #efb64b;
+  color: #f5fbf8;
+  font-weight: 600;
+  box-shadow: 0 0 6px rgba(239, 182, 75, 0.2);
+}
+.demo-role-btn.metamask {
+  border-style: dashed;
+}
+.demo-top-bar-right {
+  display: flex;
+  align-items: center;
+}
+.demo-return-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #8ebbad;
+  font-size: 11px;
+  text-decoration: none;
+  transition: color .2s;
+  padding: 3px 6px;
+  border-radius: 3px;
+}
+.demo-return-link:hover {
+  color: #efb64b;
+}
+
 @media (max-width: 800px) {
   .evaluator-grid, .metamask-modal-options { grid-template-columns: 1fr; }
   .evaluator-banner, .demo-quick-bar, .jury-storyboard, .onchain-tx-card { padding-left: 16px; padding-right: 16px; margin-left: 12px; margin-right: 12px; }
+  .demo-top-bar-inner { padding: 6px 14px; gap: 8px; justify-content: center; }
+  .demo-role-pills { flex-wrap: wrap; justify-content: center; }
 }
+
