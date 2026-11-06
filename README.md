@@ -44,6 +44,7 @@ blind-report/
 │   ├── relayer/         # Serviço HTTP de ingestão sem logs de IP
 │   ├── web-source/      # Interface web da fonte (estática)
 │   └── web-newsroom/    # Painel editorial da redação
+├── WEBSITE/             # Novo portal unificado Next.js 16 (Landing + Denúncia + Redação)
 └── tests/
     ├── contract/        # Testes de limites e regras arquiteturais
     └── e2e/             # Testes de ponta a ponta sem navegador
@@ -66,6 +67,19 @@ npm run typecheck
 
 # Pipeline completo de CI local
 npm run ci
+```
+
+### 🖥️ Novo Portal Web Unificado (Next.js 16 + Tailwind CSS)
+
+```bash
+# Instalar dependências do website
+npm run website:install
+
+# Rodar o website em modo desenvolvimento (porta 3000)
+npm run website:dev
+
+# Compilar para produção
+npm run website:build
 ```
 
 ## Licença

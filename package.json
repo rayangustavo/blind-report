@@ -34,7 +34,11 @@
     "web:newsroom": "npm run build -w apps/web-newsroom && node scripts/serve.mjs apps/web-newsroom/dist 5174",
     "links": "node --env-file=.env scripts/links.mjs",
     "keys:generate": "node scripts/generate-keys.mjs",
-    "arkiv:query": "node --env-file-if-exists=.env --import tsx arkiv/query.ts"
+    "arkiv:query": "node --env-file-if-exists=.env --import tsx arkiv/query.ts",
+    "website:install": "npm --prefix WEBSITE install",
+    "website:dev": "npm --prefix WEBSITE run dev",
+    "website:build": "npm --prefix WEBSITE run build",
+    "website:start": "npm --prefix WEBSITE run start"
   },
   "devDependencies": {
     "@arkiv-network/sdk": "^1.0.0",
