@@ -61,9 +61,6 @@ describe("regras de dependência entre pacotes", () => {
     "@blind-report/source-client": ["@blind-report/core", "@blind-report/crypto", "@blind-report/ens-client", "@blind-report/network-policy"],
     "@blind-report/newsroom-client": ["@blind-report/core", "@blind-report/crypto", "@blind-report/ens-client", "@blind-report/arkiv-store", "@blind-report/network-policy"],
     "@blind-report/relayer": ["@blind-report/core", "@blind-report/crypto", "@blind-report/ens-client", "@blind-report/arkiv-store", "@blind-report/worldid-gate", "@blind-report/network-policy"],
-    // A tela é a raiz de composição: liga ENS e Arkiv reais ao cliente; a lógica fica no source-client.
-    "@blind-report/web-source": ["@blind-report/source-client", "@blind-report/core", "@blind-report/ens-client", "@blind-report/arkiv-store", "@blind-report/network-policy"],
-    "@blind-report/web-newsroom": ["@blind-report/newsroom-client", "@blind-report/core", "@blind-report/ens-client", "@blind-report/arkiv-store", "@blind-report/network-policy"],
   };
 
   it("cada_pacote_so_depende_do_que_a_regra_permite", () => {
