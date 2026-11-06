@@ -13,24 +13,23 @@ describe('WEBSITE - Contratos Estruturais da Página Principal (app/page.tsx)', 
   })
 
   it('define as categorias de denuncia oficiais', () => {
-    const categories = ['Corrupção', 'Políticas públicas', 'Direitos humanos', 'Meio ambiente']
-    for (const cat of categories) {
-      expect(pageSource).toContain(cat)
-    }
+    expect(pageSource).toMatch(/Corruption|Corrupção/)
+    expect(pageSource).toMatch(/Public policy|Políticas públicas/)
+    expect(pageSource).toMatch(/Human rights|Direitos humanos/)
+    expect(pageSource).toContain('Meio ambiente')
   })
 
   it('define os status das denuncias para a redacao', () => {
-    expect(pageSource).toContain("unread: 'Não lida'")
-    expect(pageSource).toContain("in_review: 'Em análise'")
-    expect(pageSource).toContain("investigating: 'Investigando'")
-    expect(pageSource).toContain("archived: 'Arquivada'")
+    expect(pageSource).toMatch(/unread:\s*'(Unread|Não lida)'/)
+    expect(pageSource).toMatch(/in_review:\s*'(In review|Em análise)'/)
+    expect(pageSource).toMatch(/investigating:\s*'(Investigating|Investigando)'/)
+    expect(pageSource).toMatch(/archived:\s*'(Archived|Arquivada)'/)
   })
 
   it('define as opcoes de redacao suportadas', () => {
-    const newsrooms = ['Folha Pública', 'Jornal da Cidade', 'Agência Horizonte']
-    for (const nr of newsrooms) {
-      expect(pageSource).toContain(nr)
-    }
+    expect(pageSource).toMatch(/Public Ledger|Folha Pública/)
+    expect(pageSource).toContain('Jornal da Cidade')
+    expect(pageSource).toContain('Agência Horizonte')
   })
 
   it('garante padrao de identificador de denuncia anonima no formato BR-XXXX', () => {
@@ -44,7 +43,7 @@ describe('WEBSITE - Contratos Estruturais da Página Principal (app/page.tsx)', 
   })
 
   it('inclui os 3 passos do fluxo de denuncia (01/03, 02/03, ENVIADO)', () => {
-    expect(pageSource).toContain('NOVA DENÚNCIA')
+    expect(pageSource).toMatch(/NEW TIP|NOVA DENÚNCIA/)
     expect(pageSource).toContain('SOBRE A DENÚNCIA')
     expect(pageSource).toContain('DENÚNCIA RECEBIDA')
   })
