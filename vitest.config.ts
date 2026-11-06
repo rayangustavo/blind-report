@@ -16,7 +16,8 @@ export default defineConfig({
       "WEBSITE/test/**/*.test.ts",
       "tests/contract/**/*.test.ts",
       "tests/e2e/partner-prizes.test.ts",
-      "tests/e2e/website-frontend.test.ts"
+      "tests/e2e/website-frontend.test.ts",
+      "tests/e2e/full-stack-frontend-onchain.test.ts"
     ],
     exclude: ["**/*.int.test.ts", "**/*.e2e.test.ts", "validation/**", "**/node_modules/**"],
     coverage: {

@@ -24,6 +24,8 @@
     "test:e2e": "bash tests/run-e2e.sh",
     "test:partners": "vitest run tests/e2e/partner-prizes.test.ts",
     "test:e2e:frontend": "vitest run tests/e2e/website-frontend.test.ts",
+    "test:e2e:full": "vitest run tests/e2e/full-stack-frontend-onchain.test.ts",
+    "test:frontend:sepolia": "node --env-file-if-exists=.env --import tsx scripts/test-e2e-frontend-sepolia.ts",
     "test:sepolia": "node --env-file-if-exists=.env --import tsx scripts/test-sepolia.ts",
     "test:sepolia:flow": "node --env-file-if-exists=.env --import tsx scripts/test-e2e-sepolia.ts",
     "test:live": "node --env-file-if-exists=.env node_modules/.bin/vitest run -c vitest.live.config.ts",
