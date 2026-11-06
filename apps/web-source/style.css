@@ -1763,6 +1763,18 @@ a.brand, a.nav-tab, a.nav-cta, a.btn, .report-subnav-link, .footer-nav a { text-
 .page-hero .lede, .sec-hero .lede { margin: 1.15rem 0 0; max-width: 58ch; color: var(--muted); font-size: clamp(0.95rem, 1.3vw, 1.06rem); }
 .sec-hero .hero-actions { justify-content: flex-start; margin-top: 1.7rem; }
 .hero-assurance.compact { margin-top: 1.4rem; }
+.hero-more {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  margin-top: 1.15rem;
+  color: #a9b9e8;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(169, 185, 232, 0.28);
+  padding-bottom: 0.15rem;
+  transition: color 0.18s, border-color 0.18s, gap 0.18s;
+}
+.hero-more:hover { color: #fff; border-color: rgba(255, 255, 255, 0.6); gap: 0.65rem; }
 
 .sec-art { position: relative; min-height: 470px; display: grid; place-items: center; }
 .sec-art::before {
@@ -2055,7 +2067,9 @@ a.brand, a.nav-tab, a.nav-cta, a.btn, .report-subnav-link, .footer-nav a { text-
   .cta-band { margin-top: 3.4rem; }
 }
 @media (max-width: 620px) {
-  .nav-tabs a:nth-child(n + 3) { display: none; }
+  .nav-tabs a:nth-child(n + 4) { display: none; }
+  .page-hero { padding-top: 1.15rem; }
+  .page-hero-art { display: none; }
   .page-hero h1, .sec-hero h1 { font-size: clamp(2rem, 9vw, 3rem); }
   .page-hero .lede, .sec-hero .lede { font-size: 0.94rem; }
   .sec-hero .hero-actions, .cta-band-actions { flex-direction: column; align-items: stretch; }

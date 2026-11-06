@@ -11,13 +11,15 @@ declare const __DEMO_MODE__: boolean;
 const DEMO_MODE = typeof __DEMO_MODE__ === "boolean" ? __DEMO_MODE__ : true;
 
 type Tab = "enviar" | "respostas" | "verificar";
-type Route = "inicio" | "seguranca" | "denunciar" | "respostas" | "verificar";
+type Route = "inicio" | "sobre" | "respostas" | "verificar";
 type IconName = "shield" | "lock" | "key" | "eyeOff" | "github" | "check" | "download" | "fingerprint" | "cube" | "pin";
 
-const ROUTES: Route[] = ["inicio", "seguranca", "denunciar", "respostas", "verificar"];
+const ROUTES: Route[] = ["inicio", "sobre", "respostas", "verificar"];
+// Mantém links antigos funcionando: a denúncia virou a home e Segurança virou Sobre.
+const ROUTE_ALIASES: Record<string, Route> = { denunciar: "inicio", seguranca: "sobre" };
 function parseRoute(): Route {
   const raw = window.location.hash.replace(/^#\/?/, "").toLowerCase();
-  return (ROUTES as string[]).includes(raw) ? (raw as Route) : "inicio";
+  return ROUTE_ALIASES[raw] ?? ((ROUTES as string[]).includes(raw) ? (raw as Route) : "inicio");
 }
 const routeHref = (route: Route) => (route === "inicio" ? "#/" : `#/${route}`);
 
@@ -860,7 +862,7 @@ async function start() {
               "a",
               {
                 className: "btn primary lg",
-                href: routeHref("denunciar"),
+                href: routeHref("inicio"),
                 onclick: () => {
                   pendingFocus = true;
                 },
@@ -1138,7 +1140,7 @@ async function start() {
           { className: "creed-actions", "data-reveal": "" },
           h(
             "a",
-            { className: "btn primary xl", href: routeHref("denunciar") },
+            { className: "btn primary xl", href: routeHref("inicio") },
             "Enviar uma denúncia",
             h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→"),
           ),
@@ -1168,7 +1170,7 @@ async function start() {
           { className: "muted" },
           "Cada proteção existe por um motivo concreto — e pode ser auditada. O caminho entre você e a redação não passa por uma caixa-preta.",
         ),
-        h("a", { className: "btn ghost", href: routeHref("seguranca") }, "Explorar a arquitetura", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
+        h("a", { className: "btn ghost", href: routeHref("sobre") }, "Explorar a arquitetura", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
       ),
       h(
         "div",
@@ -1234,7 +1236,7 @@ async function start() {
           "div",
           { className: "hero-actions", "data-reveal": "" },
           h("button", { className: "btn primary lg", onclick: () => scrollToId("arquitetura") }, "Ver as camadas", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
-          h("a", { className: "btn ghost lg", href: routeHref("denunciar") }, "Testar o canal"),
+          h("a", { className: "btn ghost lg", href: routeHref("inicio") }, "Testar o canal"),
         ),
         h(
           "ul",
@@ -1269,7 +1271,7 @@ async function start() {
     const points = ["Trilha pública e auditável", "Sem metadados da fonte", "Verificação por hash"];
     return h(
       "section",
-      { className: "lattice", id: "arkiv", "data-chapter": "manifesto" },
+      { className: "lattice", id: "arkiv", "data-chapter": "arkiv" },
       h(
         "div",
         { className: "lattice-visual", "data-reveal": "" },
@@ -1334,7 +1336,7 @@ async function start() {
     const blocked = ["Analytics · bloqueado", "Trackers · bloqueados", "Fontes e pixels externos · bloqueados", "Cookies · nenhum"];
     return h(
       "section",
-      { className: "no-trace", id: "rastro", "data-chapter": "processo" },
+      { className: "no-trace", id: "rastro", "data-chapter": "rastro" },
       h(
         "div",
         { className: "no-trace-copy" },
@@ -1367,8 +1369,8 @@ async function start() {
       h(
         "div",
         { className: "cta-band-actions", "data-reveal": "" },
-        h("a", { className: "btn primary xl", href: routeHref("denunciar") }, "Enviar uma denúncia", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
-        h("a", { className: "btn ghost xl", href: routeHref("inicio") }, "Voltar ao início"),
+        h("a", { className: "btn primary xl", href: routeHref("inicio") }, "Enviar uma denúncia", h("span", { className: "btn-arrow", "aria-hidden": "true" }, "→")),
+        h("a", { className: "btn ghost xl", href: routeHref("sobre") }, "Voltar ao topo"),
       ),
     );
   }
@@ -1398,6 +1400,7 @@ async function start() {
           h("li", {}, h("span", { className: "assurance-icon" }, icon("eyeOff")), "Sem IP"),
           h("li", {}, h("span", { className: "assurance-icon" }, icon("key")), "Recibo local"),
         ),
+        h("a", { className: "hero-more", href: routeHref("sobre") }, "Como protegemos você", h("span", { "aria-hidden": "true" }, "→")),
       ),
       h(
         "div",
@@ -1416,7 +1419,7 @@ async function start() {
 
   function reportSubnav(current: Route): HTMLElement {
     const items: [Route, string, IconName][] = [
-      ["denunciar", "Denunciar", "lock"],
+      ["inicio", "Denunciar", "lock"],
       ["respostas", "Respostas", "key"],
       ["verificar", "Verificar", "shield"],
     ];
@@ -1488,10 +1491,12 @@ async function start() {
 
   function chapterNav(): HTMLElement {
     const chapters: [string, string, string][] = [
-      ["inicio", "Início", "inicio"],
+      ["inicio", "Abertura", "inicio"],
       ["manifesto", "Manifesto", "manifesto"],
       ["processo", "O caminho", "processo"],
-      ["arquitetura", "Arquitetura", "por-dentro"],
+      ["arquitetura", "Arquitetura", "arquitetura"],
+      ["arkiv", "Arkiv", "arkiv"],
+      ["rastro", "Sem rastro", "rastro"],
       ["compromisso", "Compromisso", "compromisso"],
     ];
     return h(
@@ -1525,9 +1530,8 @@ async function start() {
           "nav",
           { className: "footer-nav", "aria-label": "Mapa do site" },
           ...[
-            ["inicio", "Início"],
-            ["seguranca", "Segurança"],
-            ["denunciar", "Denunciar"],
+            ["inicio", "Denunciar"],
+            ["sobre", "Sobre"],
             ["respostas", "Respostas"],
             ["verificar", "Verificar"],
           ].map(([id, label]) => h("a", { href: routeHref(id as Route) }, label)),
@@ -1556,9 +1560,8 @@ async function start() {
   }
 
   const TITLES: Record<Route, string> = {
-    inicio: "Blind Report — fale sem deixar rastro",
-    seguranca: "Segurança por dentro — Blind Report",
-    denunciar: "Enviar denúncia — Blind Report",
+    inicio: "Enviar denúncia — Blind Report",
+    sobre: "Sobre o Blind Report — como funciona",
     respostas: "Respostas — Blind Report",
     verificar: "Verificar documento — Blind Report",
   };
@@ -1574,8 +1577,7 @@ async function start() {
 
   function topbar(): HTMLElement {
     const tabs: [Route, string][] = [
-      ["inicio", "Início"],
-      ["seguranca", "Segurança"],
+      ["sobre", "Sobre"],
       ["respostas", "Respostas"],
       ["verificar", "Verificar"],
     ];
@@ -1613,10 +1615,10 @@ async function start() {
             "a",
             {
               className: "nav-cta",
-              href: routeHref("denunciar"),
-              "aria-current": route === "denunciar" ? "page" : undefined,
+              href: routeHref("inicio"),
+              "aria-current": route === "inicio" ? "page" : undefined,
               onclick: (event: Event) => {
-                if (route === "denunciar") {
+                if (route === "inicio") {
                   event.preventDefault();
                   focusDesk();
                 } else {
@@ -1642,26 +1644,6 @@ async function start() {
 
     let main: HTMLElement;
     if (route === "inicio") {
-      main = h(
-        "main",
-        { id: "conteudo" },
-        heroLanding(),
-        manifesto(),
-        processSection(),
-        securityTeaser(),
-        creed(),
-      );
-    } else if (route === "seguranca") {
-      main = h(
-        "main",
-        { id: "conteudo" },
-        securityHero(),
-        architecture(),
-        latticeSection(),
-        noTraceSection(),
-        securityCta(),
-      );
-    } else if (route === "denunciar") {
       const body = viewSend(s);
       const active = s.step === "newsroom" || s.step === "compose";
       const stage = active
@@ -1679,10 +1661,22 @@ async function start() {
         h(
           "div",
           { className: "denuncia-wrap" },
-          reportSubnav("denunciar"),
+          reportSubnav("inicio"),
           h("section", { className: "denuncia-stage", id: "enviar-denuncia" }, stage),
         ),
         receiptLinks(),
+      );
+    } else if (route === "sobre") {
+      main = h(
+        "main",
+        { id: "conteudo" },
+        heroLanding(),
+        manifesto(),
+        processSection(),
+        architecture(),
+        latticeSection(),
+        noTraceSection(),
+        creed(),
       );
     } else {
       const body = route === "respostas" ? viewReplies(s) : viewVerify(s);
@@ -1703,9 +1697,9 @@ async function start() {
       "div",
       { className: "page" },
       h("a", { className: "skip", href: "#conteudo" }, "Ir para o conteúdo"),
-      route === "inicio" || route === "seguranca" ? scrollProgress() : null,
+      route === "sobre" ? scrollProgress() : null,
       topbar(),
-      route === "inicio" ? chapterNav() : route === "seguranca" ? securityChapterNav() : null,
+      route === "sobre" ? chapterNav() : null,
       main,
       footer(),
     );
@@ -1726,7 +1720,7 @@ async function start() {
       pendingFocus = false;
       requestAnimationFrame(focusDesk);
     } else if (changed && previous) {
-      if (route === previousRoute && route === "denunciar") {
+      if (route === previousRoute && route === "inicio") {
         requestAnimationFrame(() => document.getElementById("enviar-denuncia")?.scrollIntoView({ behavior: "auto", block: "start" }));
       } else {
         window.scrollTo({ top: 0, behavior: "auto" });
