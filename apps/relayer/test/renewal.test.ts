@@ -1,17 +1,65 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Logger } from "../src/index.ts";
+import { createRenewalJob } from "../src/index.ts";
 
-import { createRenewalJob } from "../src/renewal";
+const ok = (n: number) => vi.fn(async () => n);
+const base = (store: { renewExpiring: ReturnType<typeof vi.fn> }, over: Record<string, unknown> = {}) => {
+  const logs: unknown[] = [];
+  const sleep = vi.fn(async (_ms: number) => {});
+  const logger: Logger = { info: (e) => void logs.push(e), error: (e) => void logs.push(e) };
+  const job = createRenewalJob({
+    store: store as never, newsrooms: ["a.eth", "b.eth"], withinSeconds: 60 * 24 * 3600, retentionSeconds: 150 * 24 * 3600,
+    sleep, logger, ...over,
+  } as never);
+  return { job, sleep, logs };
+};
 
-describe("relayer renewal job", () => {
-  it("creates a renewal job with a start method", () => {
-    const job = createRenewalJob({
-      intervalMs: 1000,
-      thresholdSeconds: 60,
-      onTick: async () => undefined,
+describe("RF-18 job de renovação de retenção", () => {
+  it("renova_cada_redacao_com_os_parametros_configurados", async () => {
+    const store = { renewExpiring: ok(3) };
+    const { job } = base(store);
+    const res = await job.run();
+    expect(store.renewExpiring).toHaveBeenCalledWith({ newsroom: "a.eth", withinSeconds: 60 * 24 * 3600, retentionSeconds: 150 * 24 * 3600 });
+    expect(store.renewExpiring).toHaveBeenCalledWith({ newsroom: "b.eth", withinSeconds: 60 * 24 * 3600, retentionSeconds: 150 * 24 * 3600 });
+    expect(res).toEqual([{ newsroom: "a.eth", renewed: 3 }, { newsroom: "b.eth", renewed: 3 }]);
+  });
+
+  it("repete_com_recuo_exponencial_quando_o_rpc_falha_e_depois_funciona", async () => {
+    const renewExpiring = vi.fn().mockRejectedValueOnce(new Error("rpc 1")).mockRejectedValueOnce(new Error("rpc 2")).mockResolvedValue(1);
+    const { job, sleep } = base({ renewExpiring }, { newsrooms: ["a.eth"], baseDelayMs: 1000 });
+    expect(await job.run()).toEqual([{ newsroom: "a.eth", renewed: 1 }]);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([1000, 2000]);
+  });
+
+  it("depois_de_esgotar_as_tentativas_registra_o_erro_e_segue_para_a_proxima_redacao", async () => {
+    const renewExpiring = vi.fn(async ({ newsroom }: { newsroom: string }) => {
+      if (newsroom === "a.eth") throw new Error("rpc fora do ar");
+      return 2;
     });
+    const { job, sleep } = base({ renewExpiring }, { maxAttempts: 3, baseDelayMs: 10 });
+    const res = await job.run();
+    expect(res[0]).toMatchObject({ newsroom: "a.eth", renewed: 0, error: "falha ao renovar" });
+    expect(res[1]).toEqual({ newsroom: "b.eth", renewed: 2 });
+    expect(renewExpiring.mock.calls.filter((c) => (c[0] as { newsroom: string }).newsroom === "a.eth")).toHaveLength(3);
+    expect(sleep).toHaveBeenCalledTimes(2); // entre as 3 tentativas
+  });
 
-    expect(job).toBeTruthy();
-    expect(typeof job.start).toBe("function");
-    expect(typeof job.stop).toBe("function");
+  it("o_log_traz_so_contagens_e_nunca_a_mensagem_de_erro_interna", async () => {
+    const renewExpiring = vi.fn(async () => {
+      throw new Error("senha=abc123 em 10.1.1.1");
+    });
+    const { job, logs } = base({ renewExpiring }, { newsrooms: ["a.eth"], maxAttempts: 1 });
+    await job.run();
+    const text = JSON.stringify(logs);
+    expect(text).not.toContain("abc123");
+    expect(text).not.toContain("10.1.1.1");
+    expect(logs.length).toBeGreaterThan(0);
+  });
+
+  it("sem_redacoes_configuradas_nao_faz_nada", async () => {
+    const store = { renewExpiring: ok(1) };
+    const { job } = base(store, { newsrooms: [] });
+    expect(await job.run()).toEqual([]);
+    expect(store.renewExpiring).not.toHaveBeenCalled();
   });
 });

@@ -1,85 +1,62 @@
 import { describe, expect, it } from "vitest";
-import { PolicyError } from "../src/errors";
-import { parsePolicy, serializePolicy } from "../src/policy";
+import { DEFAULT_MAX_BYTES, PolicyError, parsePolicy } from "../src/index.ts";
 
-const validPolicy = {
-  version: 1,
-  categories: ["corrupcao", "saude"],
-  maxSizeBytes: 131_072,
-  acceptsAttachments: true,
-};
+const json = (o: unknown) => JSON.stringify(o);
 
-describe("parsePolicy", () => {
-  it("parses a JSON string into a typed policy", () => {
-    expect(parsePolicy(JSON.stringify(validPolicy))).toEqual(validPolicy);
+describe("RF-02 política da redação (denuncia.policy)", () => {
+  it("aceita_politica_valida", () => {
+    const p = parsePolicy(json({ categories: ["corrupcao", "saude"], maxBytes: 100000, attachments: true, epoch: "monthly" }));
+    expect(p).toEqual({ categories: ["corrupcao", "saude"], maxBytes: 100000, attachments: true, epoch: "monthly" });
   });
 
-  it("accepts an already parsed object and retentionDays", () => {
-    expect(parsePolicy({ ...validPolicy, retentionDays: 90 })).toEqual({ ...validPolicy, retentionDays: 90 });
+  it("aplica_padroes_quando_campo_ausente", () => {
+    const p = parsePolicy(json({ categories: ["a"] }));
+    expect(p).toEqual({ categories: ["a"], maxBytes: DEFAULT_MAX_BYTES, attachments: false, epoch: "monthly" });
   });
 
-  it("trims category names", () => {
-    const policy = parsePolicy({ ...validPolicy, categories: ["  corrupcao  "] });
-    expect(policy.categories).toEqual(["corrupcao"]);
+  it("recusa_json_malformado", () => {
+    expect(() => parsePolicy("{nao e json")).toThrow(PolicyError);
+    expect(() => parsePolicy("[]")).toThrow(PolicyError);
+    expect(() => parsePolicy("null")).toThrow(PolicyError);
   });
 
-  it("rejects policies that are not JSON objects", () => {
-    expect(() => parsePolicy("{not json")).toThrow(PolicyError);
-    expect(() => parsePolicy("null")).toThrowError(/JSON object/);
-    expect(() => parsePolicy("[]")).toThrowError(/JSON object/);
-    expect(() => parsePolicy(42)).toThrowError(/JSON object/);
+  it("recusa_categorias_vazias_ou_ausentes", () => {
+    expect(() => parsePolicy(json({}))).toThrow(PolicyError);
+    expect(() => parsePolicy(json({ categories: [] }))).toThrow(PolicyError);
   });
 
-  it("rejects an invalid version", () => {
-    for (const version of [0, -1, 1.5, "1", undefined]) {
-      expect(() => parsePolicy({ ...validPolicy, version })).toThrowError(/policy.version/);
+  it("recusa_categoria_invalida_ou_repetida", () => {
+    for (const bad of [[""], ["A"], ["com espaco"], ["x".repeat(33)], [1], ["a", "a"]]) {
+      expect(() => parsePolicy(json({ categories: bad })), JSON.stringify(bad)).toThrow(PolicyError);
     }
   });
 
-  it("rejects invalid categories", () => {
-    expect(() => parsePolicy({ ...validPolicy, categories: undefined })).toThrowError(/non-empty array/);
-    expect(() => parsePolicy({ ...validPolicy, categories: [] })).toThrowError(/non-empty array/);
-    expect(() => parsePolicy({ ...validPolicy, categories: "corrupcao" })).toThrowError(/non-empty array/);
-    expect(() => parsePolicy({ ...validPolicy, categories: [1] })).toThrowError(/must be a string/);
-    expect(() => parsePolicy({ ...validPolicy, categories: ["   "] })).toThrowError(/characters/);
-    expect(() => parsePolicy({ ...validPolicy, categories: ["x".repeat(65)] })).toThrowError(/characters/);
-    expect(() => parsePolicy({ ...validPolicy, categories: ["Corrupcao", "corrupcao"] })).toThrowError(/duplicate/);
-    expect(() => parsePolicy({ ...validPolicy, categories: Array.from({ length: 101 }, (_, i) => `c${i}`) })).toThrowError(/at most 100/);
+  it("recusa_mais_de_32_categorias", () => {
+    const many = Array.from({ length: 33 }, (_, i) => `c${i}`);
+    expect(() => parsePolicy(json({ categories: many }))).toThrow(PolicyError);
   });
 
-  it("rejects an invalid maxSizeBytes", () => {
-    for (const maxSizeBytes of [0, -5, 10.5, "1000", undefined]) {
-      expect(() => parsePolicy({ ...validPolicy, maxSizeBytes })).toThrowError(/maxSizeBytes/);
+  it("recusa_maxBytes_invalido", () => {
+    for (const bad of [0, -1, 1.5, "10", 11 * 1024 * 1024]) {
+      expect(() => parsePolicy(json({ categories: ["a"], maxBytes: bad })), String(bad)).toThrow(PolicyError);
     }
   });
 
-  it("rejects a non-boolean acceptsAttachments", () => {
-    expect(() => parsePolicy({ ...validPolicy, acceptsAttachments: "yes" })).toThrowError(/acceptsAttachments/);
-    expect(() => parsePolicy({ ...validPolicy, acceptsAttachments: undefined })).toThrowError(/acceptsAttachments/);
+  it("recusa_attachments_que_nao_seja_booleano", () => {
+    expect(() => parsePolicy(json({ categories: ["a"], attachments: "sim" }))).toThrow(PolicyError);
   });
 
-  it("rejects an invalid retentionDays", () => {
-    expect(() => parsePolicy({ ...validPolicy, retentionDays: 0 })).toThrowError(/retentionDays/);
-    expect(() => parsePolicy({ ...validPolicy, retentionDays: 1.5 })).toThrowError(/retentionDays/);
-  });
-});
-
-describe("serializePolicy", () => {
-  it("serializes deterministically", () => {
-    const withRetention = { ...validPolicy, retentionDays: 30 };
-    expect(serializePolicy(withRetention)).toBe(
-      '{"version":1,"categories":["corrupcao","saude"],"maxSizeBytes":131072,"acceptsAttachments":true,"retentionDays":30}',
-    );
-    expect(serializePolicy({ ...validPolicy, extra: true } as never)).toBe(
-      '{"version":1,"categories":["corrupcao","saude"],"maxSizeBytes":131072,"acceptsAttachments":true}',
-    );
+  it("recusa_epoca_diferente_de_mensal", () => {
+    expect(() => parsePolicy(json({ categories: ["a"], epoch: "weekly" }))).toThrow(PolicyError);
   });
 
-  it("round-trips through parsePolicy", () => {
-    expect(parsePolicy(serializePolicy(validPolicy))).toEqual(validPolicy);
-  });
-
-  it("validates before serializing", () => {
-    expect(() => serializePolicy({ ...validPolicy, version: 0 })).toThrow(PolicyError);
+  it("o_erro_traz_um_codigo_e_a_causa", () => {
+    try {
+      parsePolicy(json({ categories: [] }));
+    } catch (e) {
+      expect(e).toBeInstanceOf(PolicyError);
+      expect((e as PolicyError).code).toBe("categories");
+      expect((e as PolicyError).message).toMatch(/categoria/i);
+    }
   });
 });

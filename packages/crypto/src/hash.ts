@@ -1,13 +1,15 @@
-import { toBase64Url } from "@blind-report/core";
-import { sha256 } from "@noble/hashes/sha256";
+import { sodium } from "./sodium.ts";
 
-/** SHA-256 em bytes (síncrono, portável entre Node e navegador). */
-export function sha256Bytes(bytes: Uint8Array): Uint8Array {
-  if (!(bytes instanceof Uint8Array)) throw new TypeError("expected a Uint8Array");
-  return sha256(bytes);
-}
+const toHex = (bytes: Uint8Array) => "0x" + sodium.to_hex(bytes);
 
-/** Hash de conteúdo em base64url, usado como `Envelope.contentHash`. */
-export function contentHashOf(bytes: Uint8Array): string {
-  return toBase64Url(sha256Bytes(bytes));
+/** BLAKE2b-256 de uma sequência de partes, em hexadecimal com prefixo 0x. */
+export function hashHex(...parts: Uint8Array[]): string {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let offset = 0;
+  for (const p of parts) {
+    buf.set(p, offset);
+    offset += p.length;
+  }
+  return toHex(sodium.crypto_generichash(32, buf, null));
 }

@@ -1,4 +1,4 @@
-// Padrões do guardrail "sem Tor nem redes de anonimato semelhantes" do Safe Whistle.
+// Padrões do guardrail "sem Tor nem redes de anonimato semelhantes" do Blind Report.
 // Fonte única: usada pelo hook do Claude Code (.claude/hooks/block-anon.mjs), pelo verificador do repositório
 // (check.mjs) e pelos testes (patterns.test.mjs).
 //

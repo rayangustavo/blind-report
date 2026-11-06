@@ -1,65 +1,41 @@
-import { InvalidNewsroomNameError, isNewsroomName } from "@blind-report/core";
-import { isAddress, zeroAddress, type Address, type PublicClient } from "viem";
-import { ETHRegistryAbi } from "./abis/index";
-import { nodeForName } from "./dns";
-import { EnsAdminError } from "./errors";
+import { isNewsroomName } from "@blind-report/core";
+import type { Address } from "viem";
+import { InvalidNameError } from "./errors.ts";
+import type { NewsroomInfo } from "./records.ts";
 
-export type AuthorityDeps = {
-  publicClient: PublicClient;
-  registryAddress: Address;
-};
+/** Quem escreveu uma anotação ou resposta: `creator` vem da cadeia; `authorName` é só uma declaração. */
+export type AuthorClaim = { creator: Address; authorName?: string };
 
-/** Confere se o nó do subname possui dono ativo (não nulo) no ETHRegistry. */
-export async function isActiveJournalist(deps: AuthorityDeps, subname: string): Promise<boolean> {
-  if (typeof deps !== "object" || deps === null) throw new EnsAdminError("authority dependencies are required");
-  const { publicClient, registryAddress } = deps;
-  if (typeof publicClient !== "object" || publicClient === null || typeof publicClient.readContract !== "function") {
-    throw new EnsAdminError("publicClient with readContract is required");
-  }
-  if (typeof registryAddress !== "string" || !isAddress(registryAddress)) {
-    throw new EnsAdminError("registryAddress must be a valid address");
-  }
-  if (!isNewsroomName(subname)) throw new InvalidNewsroomNameError(subname);
-
-  const owner = await publicClient.readContract({
-    address: registryAddress,
-    abi: ETHRegistryAbi,
-    functionName: "owner",
-    args: [nodeForName(subname)],
-  });
-  return typeof owner === "string" && isAddress(owner) && owner.toLowerCase() !== zeroAddress;
-}
-
-export type AuthorityReader = {
-  resolveNewsroom(name: string): Promise<{ custodianAddress?: Address; custodian?: Address }>;
-  journalistOwner?(name: string): Promise<Address | null>;
-};
-
-export type AuthorityArgs = { reader: AuthorityReader; newsroom: string };
+const JOURNALIST_LABEL_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 /**
- * Decide se uma assinatura veio do custodiante da redação ou de um jornalista
- * subnome ativo. A consulta é feita no momento da leitura (o ENS manda).
+ * Autoridade de uma redação: o administrador (custodiante no ENS) ou um jornalista ativo,
+ * isto é, dono de um subnome ativo da redação. Consulta o ENS uma vez por nome e o custodiante uma vez.
+ * Crie uma por operação de leitura: o resultado reflete o estado do ENS naquele momento.
  */
-export function createAuthority(deps: AuthorityArgs): {
-  isAuthorized: (args: { creator: Address; authorName?: string }) => Promise<boolean>;
-} {
-  if (typeof deps !== "object" || deps === null || typeof deps.reader !== "object" || deps.reader === null) {
-    throw new EnsAdminError("authority dependencies are required");
-  }
+export function createAuthority(opts: {
+  reader: { resolveNewsroom(name: string): Promise<Pick<NewsroomInfo, "custodian">>; journalistOwner(name: string): Promise<Address | null> };
+  newsroom: string;
+}) {
+  if (!isNewsroomName(opts.newsroom)) throw new InvalidNameError(opts.newsroom, "esperado um nome .eth em minúsculas");
+  const suffix = `.${opts.newsroom}`;
+  let custodian: Promise<string> | undefined;
+  const owners = new Map<string, Promise<Address | null>>();
+
   return {
-    async isAuthorized({ creator, authorName }: { creator: Address; authorName?: string }): Promise<boolean> {
-      if (typeof creator !== "string" || !isAddress(creator)) return false;
-      const info = await deps.reader.resolveNewsroom(deps.newsroom);
-      const custodian = info.custodianAddress ?? info.custodian;
-      if (typeof custodian === "string" && isAddress(custodian) && custodian.toLowerCase() === creator.toLowerCase()) {
-        return true;
-      }
-      if (typeof authorName === "string" && typeof deps.reader.journalistOwner === "function") {
-        const owner = await deps.reader.journalistOwner(authorName);
-        if (typeof owner === "string" && isAddress(owner) && owner.toLowerCase() === creator.toLowerCase()) return true;
-      }
-      return false;
+    async isAuthorized(claim: AuthorClaim): Promise<boolean> {
+      custodian ??= opts.reader.resolveNewsroom(opts.newsroom).then((i) => i.custodian.toLowerCase());
+      const creator = claim.creator.toLowerCase();
+      if (creator === (await custodian)) return true;
+      const name = claim.authorName;
+      if (name === undefined || !name.endsWith(suffix)) return false;
+      const label = name.slice(0, -suffix.length);
+      if (!JOURNALIST_LABEL_RE.test(label)) return false;
+      if (!owners.has(name)) owners.set(name, opts.reader.journalistOwner(name));
+      const owner = await owners.get(name)!;
+      return owner !== null && owner.toLowerCase() === creator;
     },
   };
 }
+
+export type Authority = ReturnType<typeof createAuthority>;

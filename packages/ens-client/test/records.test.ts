@@ -1,79 +1,81 @@
-import { serializePolicy, toBase64Url, type NewsroomPolicy } from "@blind-report/core";
+import { toBase64Url } from "@blind-report/core";
 import { describe, expect, it } from "vitest";
-import { EnsResolutionError } from "../src/errors";
-import { parseNewsroomRecords, parsePublicKeyRecord, parseVersionRecord } from "../src/records";
+import { RecordsError, parseNewsroomRecords } from "../src/index.ts";
 
-const publicKey = toBase64Url(new Uint8Array(32).fill(7));
-const policy: NewsroomPolicy = {
-  version: 1,
-  categories: ["corrupcao", "saude"],
-  maxSizeBytes: 131_072,
-  acceptsAttachments: true,
-};
-const custodianAddress = "0x1111111111111111111111111111111111111111";
-const records = {
-  key: publicKey,
-  version: "2",
-  policy: serializePolicy(policy),
-  custodianAddress,
-};
+const KEY = new Uint8Array(32).map((_, i) => i + 1);
+const custodian = "0xdC35Ef1b21dfE85F595132829E4C2bfcBB5c037e";
+const policyJson = JSON.stringify({ categories: ["corrupcao", "saude"], maxBytes: 100000, attachments: true });
 
-describe("parsePublicKeyRecord", () => {
-  it("accepts a 32-byte base64url key", () => {
-    expect(parsePublicKeyRecord(publicKey, "denuncia.key")).toBe(publicKey);
-  });
-
-  it("rejects missing or malformed keys", () => {
-    expect(() => parsePublicKeyRecord(undefined, "denuncia.key")).toThrow(/missing/);
-    expect(() => parsePublicKeyRecord("", "denuncia.key")).toThrow(/missing/);
-    expect(() => parsePublicKeyRecord("***", "denuncia.key")).toThrow(/base64url/);
-    expect(() => parsePublicKeyRecord(toBase64Url(new Uint8Array(31)), "denuncia.key")).toThrow(/32 bytes/);
-  });
+const raw = (over: Record<string, unknown> = {}) => ({
+  name: "investiga.jornal.eth",
+  pubkey: toBase64Url(KEY),
+  version: "3",
+  policy: policyJson,
+  relayer: "https://relayer-1.example.org,https://relayer-2.example.org",
+  custodian,
+  ...over,
 });
 
-describe("parseVersionRecord", () => {
-  it("parses positive integers", () => {
-    expect(parseVersionRecord("1")).toBe(1);
-    expect(parseVersionRecord("2026")).toBe(2026);
+const codeOf = (fn: () => unknown) => {
+  try {
+    fn();
+    return "sem erro";
+  } catch (e) {
+    return e instanceof RecordsError ? e.code : "outro erro";
+  }
+};
+
+describe("RF-02 ler os registros da redação", () => {
+  it("interpreta_chave_versao_politica_relayers_e_custodiante", () => {
+    const info = parseNewsroomRecords(raw());
+    expect(info.name).toBe("investiga.jornal.eth");
+    expect(info.publicKey).toEqual(KEY);
+    expect(info.pubkeyVersion).toBe(3);
+    expect(info.policy).toMatchObject({ categories: ["corrupcao", "saude"], maxBytes: 100000, attachments: true });
+    expect(info.relayers).toEqual(["https://relayer-1.example.org", "https://relayer-2.example.org"]);
+    expect(info.custodian).toBe(custodian);
   });
 
-  it("rejects non-positive and malformed versions", () => {
-    for (const value of ["", "0", "-1", "1.5", "abc", "1 "]) {
-      expect(() => parseVersionRecord(value)).toThrow(EnsResolutionError);
-    }
-    expect(() => parseVersionRecord(undefined)).toThrow(EnsResolutionError);
-    expect(() => parseVersionRecord(`${Number.MAX_SAFE_INTEGER}9`)).toThrow(/out of range/);
-  });
-});
-
-describe("parseNewsroomRecords", () => {
-  it("builds a validated NewsroomInfo", () => {
-    expect(parseNewsroomRecords("redacao.eth", records)).toEqual({
-      name: "redacao.eth",
-      publicKey,
-      version: 2,
-      policy,
-      custodianAddress,
-    });
+  it("relayer_e_opcional", () => {
+    expect(parseNewsroomRecords(raw({ relayer: null })).relayers).toEqual([]);
+    expect(parseNewsroomRecords(raw({ relayer: "" })).relayers).toEqual([]);
   });
 
-  it("rejects invalid names and policies", () => {
-    expect(() => parseNewsroomRecords("redacao.com", records)).toThrow(/invalid newsroom name/);
-    expect(() => parseNewsroomRecords("REDACAO.eth", records)).toThrow(/invalid newsroom name/);
-    expect(() => parseNewsroomRecords("redacao.eth", { ...records, policy: undefined })).toThrow(/denuncia.policy/);
-    expect(() => parseNewsroomRecords("redacao.eth", { ...records, policy: "{bad" })).toThrow(/denuncia.policy/);
+  it("chave_ausente_gera_erro_claro", () => {
+    expect(codeOf(() => parseNewsroomRecords(raw({ pubkey: null })))).toBe("pubkey");
+    expect(codeOf(() => parseNewsroomRecords(raw({ pubkey: "" })))).toBe("pubkey");
   });
 
-  it("rejects missing key and version records", () => {
-    expect(() => parseNewsroomRecords("redacao.eth", { ...records, key: undefined })).toThrow(/denuncia.key/);
-    expect(() => parseNewsroomRecords("redacao.eth", { ...records, version: undefined })).toThrow(/denuncia.version/);
+  it("chave_com_tamanho_ou_formato_errado_gera_erro", () => {
+    expect(codeOf(() => parseNewsroomRecords(raw({ pubkey: toBase64Url(new Uint8Array(16)) })))).toBe("pubkey");
+    expect(codeOf(() => parseNewsroomRecords(raw({ pubkey: "isto não é base64url!" })))).toBe("pubkey");
   });
 
-  it("rejects an invalid custodian", () => {
-    for (const custodian of [undefined, "", "not-an-address", "0x0000000000000000000000000000000000000000"]) {
-      expect(() => parseNewsroomRecords("redacao.eth", { ...records, custodianAddress: custodian })).toThrow(
-        /custodian/,
-      );
+  it("versao_invalida_gera_erro", () => {
+    for (const v of [null, "", "0", "-1", "1.5", "abc", "2 "]) expect(codeOf(() => parseNewsroomRecords(raw({ version: v }))), String(v)).toBe("version");
+  });
+
+  it("politica_invalida_ou_ausente_gera_erro", () => {
+    expect(codeOf(() => parseNewsroomRecords(raw({ policy: null })))).toBe("policy");
+    expect(codeOf(() => parseNewsroomRecords(raw({ policy: "{nao json" })))).toBe("policy");
+    expect(codeOf(() => parseNewsroomRecords(raw({ policy: JSON.stringify({ categories: [] }) })))).toBe("policy");
+  });
+
+  it("relayer_so_aceita_https", () => {
+    expect(codeOf(() => parseNewsroomRecords(raw({ relayer: "http://inseguro.example.org" })))).toBe("relayer");
+    expect(codeOf(() => parseNewsroomRecords(raw({ relayer: "nao e url" })))).toBe("relayer");
+  });
+
+  it("custodiante_ausente_ou_zero_gera_erro", () => {
+    expect(codeOf(() => parseNewsroomRecords(raw({ custodian: null })))).toBe("custodian");
+    expect(codeOf(() => parseNewsroomRecords(raw({ custodian: "0x0000000000000000000000000000000000000000" })))).toBe("custodian");
+  });
+
+  it("a_mensagem_de_erro_diz_qual_registro_falhou", () => {
+    try {
+      parseNewsroomRecords(raw({ pubkey: null }));
+    } catch (e) {
+      expect((e as Error).message).toContain("denuncia.pubkey");
     }
   });
 });

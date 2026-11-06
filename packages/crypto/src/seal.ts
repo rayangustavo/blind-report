@@ -1,81 +1,60 @@
-import { toBase64Url } from "@blind-report/core";
-import type { Envelope } from "@blind-report/core";
-import { aadFor } from "./aad";
-import { concatBytes } from "./bytes";
-import { KEY_BYTES, MAX_RECIPIENTS, NONCE_BYTES, TAG_BYTES } from "./constants";
-import { CryptoError } from "./errors";
-import { contentHashOf } from "./hash";
-import { decodeKey } from "./keys";
-import { loadSodium } from "./sodium";
+import type { Envelope, Receipt } from "@blind-report/core";
+import { aadOf } from "./aad.ts";
+import { commitmentOf } from "./commitment.ts";
+import { withDefaults, type Deps } from "./deps.ts";
+import { CryptoError } from "./errors.ts";
+import { hashHex } from "./hash.ts";
+import { sodium } from "./sodium.ts";
+
+export type Recipient = { id: string; publicKey: Uint8Array };
 
 export type SealOptions = {
-  plaintext: Uint8Array;
-  recipientPublicKeys: string[];
   newsroom: string;
+  pubkeyVersion: number;
   category: string;
-  epoch: string;
-  version: number;
+  recipients: Recipient[];
+  plaintext: Uint8Array;
 };
 
-function assertSealOptions(options: SealOptions): void {
-  if (typeof options !== "object" || options === null) throw new CryptoError("seal options are required");
-  if (!(options.plaintext instanceof Uint8Array)) throw new CryptoError("plaintext must be a Uint8Array");
-  if (!Array.isArray(options.recipientPublicKeys) || options.recipientPublicKeys.length === 0) {
-    throw new CryptoError("at least one recipient public key is required");
+/** Cifra a denúncia para os destinatários da redação e gera o mailbox e o recibo da fonte. */
+export function seal(opts: SealOptions, deps?: Partial<Deps>): { envelope: Envelope; receipt: Receipt } {
+  const d = withDefaults(deps);
+  if (opts.recipients.length === 0) throw new CryptoError("recipients", "É preciso ao menos um destinatário.");
+  if (new Set(opts.recipients.map((r) => r.id)).size !== opts.recipients.length) {
+    throw new CryptoError("recipients", "Destinatários com o mesmo identificador.");
   }
-  if (options.recipientPublicKeys.length > MAX_RECIPIENTS) {
-    throw new CryptoError(`at most ${MAX_RECIPIENTS} recipients are supported`);
+  for (const r of opts.recipients) {
+    if (r.publicKey.length !== sodium.crypto_box_PUBLICKEYBYTES) throw new CryptoError("key", `Chave pública inválida para "${r.id}".`);
   }
-  for (const field of ["newsroom", "category", "epoch"] as const) {
-    const value = options[field];
-    if (typeof value !== "string" || value.length === 0) throw new CryptoError(`${field} must be a non-empty string`);
-  }
-  if (!Number.isSafeInteger(options.version) || options.version <= 0) {
-    throw new CryptoError("version must be a positive integer");
-  }
-}
+  if (opts.plaintext.length === 0) throw new CryptoError("input", "O texto não pode ser vazio.");
+  if (!Number.isInteger(opts.pubkeyVersion) || opts.pubkeyVersion < 1) throw new CryptoError("input", "Versão da chave inválida.");
 
-/**
- * Cifra um payload para múltiplos destinatários.
- *
- * Uma chave simétrica temporária cifra o conteúdo com XChaCha20-Poly1305
- * (AAD = versão + redação + categoria + época). Essa chave é então embrulhada
- * para cada destinatário com `crypto_box` (X25519) usando um par efêmero.
- * O nonce do AEAD vai prefixado ao `ciphertext`.
- */
-export async function seal(options: SealOptions): Promise<Envelope> {
-  assertSealOptions(options);
-  const sodium = await loadSodium();
-  const recipientKeys = options.recipientPublicKeys.map((key) => decodeKey(key, "recipientPublicKey"));
-  const ephemeral = sodium.crypto_box_keypair();
-  const symmetricKey = sodium.randombytes_buf(KEY_BYTES);
-  const nonce = sodium.randombytes_buf(NONCE_BYTES);
+  const contentKey = d.random(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
+  const nonce = d.random(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+  const salt = d.random(32);
+  const mailbox = sodium.crypto_box_seed_keypair(d.random(sodium.crypto_box_SEEDBYTES));
 
-  const sealed = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-    options.plaintext,
-    aadFor(options),
+  const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+    opts.plaintext,
+    aadOf(opts.newsroom, opts.pubkeyVersion, opts.category),
     null,
     nonce,
-    symmetricKey,
+    contentKey,
   );
-  const authTag = sealed.slice(sealed.length - TAG_BYTES);
-  const ciphertext = concatBytes(nonce, sealed.slice(0, sealed.length - TAG_BYTES));
 
-  const wrappedKeys = recipientKeys.map((publicKey) => {
-    const wrapNonce = sodium.randombytes_buf(NONCE_BYTES);
-    const wrapped = sodium.crypto_box_easy(symmetricKey, wrapNonce, publicKey, ephemeral.privateKey);
-    return toBase64Url(concatBytes(wrapNonce, wrapped));
-  });
-
-  return {
-    version: options.version,
-    newsroom: options.newsroom,
-    category: options.category,
-    epoch: options.epoch,
-    recipientKeys: wrappedKeys,
-    ephemeralPublicKey: toBase64Url(ephemeral.publicKey),
+  const envelope: Envelope = {
+    v: 1,
+    newsroom: opts.newsroom,
+    pubkeyVersion: opts.pubkeyVersion,
+    category: opts.category,
+    wrappedKeys: opts.recipients.map((r) => ({ recipient: r.id, sealed: sodium.crypto_box_seal(contentKey, r.publicKey) })),
+    nonce,
     ciphertext,
-    authTag,
-    contentHash: contentHashOf(concatBytes(ciphertext, authTag)),
+    contentHash: hashHex(ciphertext),
+    commitment: commitmentOf(opts.plaintext, salt),
+    mailboxPub: mailbox.publicKey,
+    clientTs: Math.floor(d.now().getTime() / 1000),
   };
+  const receipt: Receipt = { contentHash: envelope.contentHash, salt, mailboxPriv: mailbox.privateKey, mailboxPub: mailbox.publicKey };
+  return { envelope, receipt };
 }

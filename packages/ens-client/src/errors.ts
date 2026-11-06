@@ -1,29 +1,24 @@
-export class EnsResolutionError extends Error {
-  constructor(message: string) {
+export class InvalidNameError extends Error {
+  constructor(name: string, why = "") {
+    super(`Nome ENS inválido: "${name}"${why ? ` (${why})` : ""}`);
+    this.name = "InvalidNameError";
+  }
+}
+
+export type RecordsErrorCode = "pubkey" | "version" | "policy" | "relayer" | "custodian" | "readerkey";
+
+/** Um registro de texto ou de endereço da redação está ausente ou inválido. */
+export class RecordsError extends Error {
+  constructor(public readonly code: RecordsErrorCode, message: string) {
     super(message);
-    this.name = "EnsResolutionError";
-  }
-}
-
-export class EnsAdminError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "EnsAdminError";
-  }
-}
-
-/** Nome de redação não registrado/ativo no ENS. */
-export class NewsroomNotFoundError extends EnsResolutionError {
-  constructor(name: string) {
-    super(`newsroom not found: ${name}`);
-    this.name = "NewsroomNotFoundError";
-  }
-}
-
-/** Registros ENS da redação publicados de forma inválida ou incompleta. */
-export class RecordsError extends EnsResolutionError {
-  constructor(public readonly field: string, detail?: string) {
-    super(`invalid newsroom record "${field}"${detail ? `: ${detail}` : ""}`);
     this.name = "RecordsError";
+  }
+}
+
+/** O nome não tem nenhum dos registros esperados. */
+export class NewsroomNotFoundError extends Error {
+  constructor(name: string) {
+    super(`Nenhuma redação encontrada para o nome "${name}".`);
+    this.name = "NewsroomNotFoundError";
   }
 }

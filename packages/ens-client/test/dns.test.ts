@@ -1,43 +1,30 @@
-import { namehash } from "viem";
 import { describe, expect, it } from "vitest";
-import { encodeDnsName, nodeForName } from "../src/dns";
+import { InvalidNameError, dnsEncode } from "../src/index.ts";
 
-const utf8 = (value: string) => Array.from(new TextEncoder().encode(value));
-
-describe("encodeDnsName", () => {
-  it("encodes labels in DNS wire format", () => {
-    expect(Array.from(encodeDnsName("eth"))).toEqual([3, ...utf8("eth"), 0]);
-    expect(Array.from(encodeDnsName("redacao.eth"))).toEqual([7, ...utf8("redacao"), 3, ...utf8("eth"), 0]);
-    expect(Array.from(encodeDnsName("eth."))).toEqual([3, ...utf8("eth"), 0]);
+describe("nome em formato DNS (os setters do ENSv2 não usam namehash)", () => {
+  it("codifica_nome_simples", () => {
+    expect(dnsEncode("a.eth")).toBe("0x01610365746800");
   });
 
-  it("uses UTF-8 byte lengths", () => {
-    expect(Array.from(encodeDnsName("é.eth"))).toEqual([2, 0xc3, 0xa9, 3, ...utf8("eth"), 0]);
+  it("codifica_subnome_com_prefixo_de_tamanho_por_rotulo", () => {
+    // 9 'investiga', 6 'jornal', 3 'eth'
+    expect(dnsEncode("investiga.jornal.eth")).toBe("0x09696e76657374696761066a6f726e616c0365746800");
   });
 
-  it("rejects invalid names", () => {
-    const invalid = [
-      "",
-      ".",
-      ".eth",
-      "redacao..eth",
-      `${"a".repeat(64)}.eth`,
-      `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(63)}.eth`,
-    ];
-    for (const name of invalid) expect(() => encodeDnsName(name)).toThrow(TypeError);
-    expect(() => encodeDnsName(42 as unknown as string)).toThrow(TypeError);
-  });
-});
-
-describe("nodeForName", () => {
-  it("matches the ENS namehash", () => {
-    expect(nodeForName("eth")).toBe(namehash("eth"));
-    expect(nodeForName("marina.redacao.eth")).toBe(namehash("marina.redacao.eth"));
-    expect(nodeForName("eth")).toHaveLength(66);
+  it("termina_sempre_com_o_byte_zero", () => {
+    expect(dnsEncode("x.y.eth").endsWith("00")).toBe(true);
   });
 
-  it("rejects empty or non-string names", () => {
-    expect(() => nodeForName("")).toThrow(TypeError);
-    expect(() => nodeForName(1 as unknown as string)).toThrow(TypeError);
+  it("recusa_nome_vazio_ou_rotulo_vazio", () => {
+    for (const bad of ["", ".", "a..eth", ".eth", "a.eth."]) expect(() => dnsEncode(bad), bad).toThrow(InvalidNameError);
+  });
+
+  it("recusa_rotulo_com_mais_de_63_bytes", () => {
+    expect(() => dnsEncode(`${"a".repeat(64)}.eth`)).toThrow(InvalidNameError);
+    expect(() => dnsEncode(`${"a".repeat(63)}.eth`)).not.toThrow();
+  });
+
+  it("recusa_maiusculas_e_caracteres_fora_do_conjunto_permitido", () => {
+    for (const bad of ["A.eth", "a b.eth", "a_b.eth", "ação.eth", "a/b.eth", "-a.eth", "a-.eth"]) expect(() => dnsEncode(bad), bad).toThrow(InvalidNameError);
   });
 });

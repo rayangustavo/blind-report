@@ -1,62 +1,37 @@
-import type { IdKitPayload } from "./types";
+import type { IdKitPayload, Verifier, VerifyResult } from "./types.ts";
 
-export type VerificationResult =
-  | { ok: true }
-  | { ok: false; code: "invalid_proof" | "expired" | "invalid_action" };
+const DEFAULT_BASE = "https://developer.world.org";
 
-export type ProofVerifier = (
-  payload: IdKitPayload,
-  expectedAction: string,
-) => Promise<VerificationResult>;
-
-export function createSimulatedVerifier({ appId }: { appId: string }): ProofVerifier {
-  return async (payload, expectedAction) => {
-    if (!payload || typeof payload.proof !== "string" || payload.proof.length === 0) {
-      return { ok: false, code: "invalid_proof" };
+/** Verificador real: POST /api/v4/verify/{rp_id}. Recebe o `fetch` (use `guardedFetch` no relayer). */
+export function createWorldVerifier(opts: { rpId: string; fetch?: typeof fetch; baseUrl?: string; timeoutMs?: number }): Verifier {
+  const base = (opts.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, "");
+  const doFetch = opts.fetch ?? globalThis.fetch;
+  const timeoutMs = opts.timeoutMs ?? 15_000;
+  return async (payload: IdKitPayload): Promise<VerifyResult> => {
+    let res: Response;
+    try {
+      res = await doFetch(`${base}/api/v4/verify/${opts.rpId}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (e) {
+      const name = (e as { name?: string }).name;
+      return { success: false, error: name === "TimeoutError" || name === "AbortError" ? "tempo esgotado ao falar com o World" : "falha de rede ao falar com o World" };
     }
-
-    if (payload.proof === "bad-proof") {
-      return { ok: false, code: "invalid_proof" };
-    }
-
-    if (!expectedAction || !expectedAction.includes(":")) {
-      return { ok: false, code: "invalid_action" };
-    }
-
-    if (expectedAction.includes(appId) === false && appId !== "blind-report") {
-      return { ok: false, code: "invalid_action" };
-    }
-
-    return { ok: true };
+    type Body = { success?: unknown; environment?: string; action?: string; code?: string; detail?: string };
+    const body = (await res.json().catch(() => undefined)) as Body | undefined;
+    if (body === undefined) return { success: false, error: `${res.status} resposta inválida do World` };
+    if (res.ok && body.success === true) return { success: true, environment: body.environment, action: body.action };
+    return { success: false, error: `${res.status} ${body.code ?? ""} ${body.detail ?? ""}`.replace(/\s+/g, " ").trim() };
   };
 }
 
-export function createWorldVerifier({
-  appId,
-  apiUrl,
-  fetchImpl = globalThis.fetch,
-}: {
-  appId: string;
-  apiUrl?: string;
-  fetchImpl?: typeof globalThis.fetch;
-}): ProofVerifier {
-  return async (payload, expectedAction) => {
-    const target = apiUrl ?? "https://developer.worldcoin.org/api/v1/verify";
-    const response = await fetchImpl(target, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ app_id: appId, action: expectedAction, payload }),
-    });
-
-    if (!response.ok) {
-      return { ok: false, code: "invalid_proof" };
-    }
-
-    const data = (await response.json()) as { success?: boolean; code?: string };
-    if (data.success === false) {
-      return { ok: false, code: data.code === "expired" ? "expired" : "invalid_proof" };
-    }
-
-    return { ok: true };
+/** Dublê para testes: aprova qualquer prova, exceto as marcadas com `valid: false`. */
+export function createSimulatedVerifier(): Verifier {
+  return async (payload) => {
+    if ((payload as { valid?: boolean }).valid === false) return { success: false, error: "prova simulada inválida" };
+    return { success: true, environment: payload.environment, action: payload.action, nullifier: payload.responses?.[0]?.nullifier };
   };
 }

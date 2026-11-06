@@ -1,60 +1,53 @@
+import { Nullifier } from "@worldcoin/idkit-core/nullifier";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import type { NullifierStore } from "./types.ts";
 
-export interface NullifierStore {
-  consume(action: string, nullifierHash: string): Promise<boolean>;
-  release(action: string, nullifierHash: string): Promise<void>;
+/** Chave do par (nullifier, ação): só o hash é guardado, nunca o nullifier nem a ação. Lança se o nullifier for inválido. */
+export function usedKey(nullifier: string, action: string): string {
+  const canonical = Nullifier.fromHex(nullifier).toCanonicalString();
+  return createHash("sha256").update(`${canonical}|${action}`).digest("hex");
 }
 
 export function createMemoryNullifierStore(): NullifierStore {
-  const seen = new Set<string>();
-
+  const used = new Set<string>();
   return {
-    async consume(action: string, nullifierHash: string) {
-      const key = `${action}:${nullifierHash}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+    async has(key) {
+      return used.has(key);
+    },
+    async claim(key) {
+      if (used.has(key)) return false;
+      used.add(key);
       return true;
     },
-    async release(action: string, nullifierHash: string) {
-      seen.delete(`${action}:${nullifierHash}`);
+    async release(key) {
+      used.delete(key);
     },
   };
 }
 
-export function createFileNullifierStore(filePath: string): NullifierStore {
-  const normalizedFilePath = resolve(filePath);
-  const cache = new Map<string, boolean>();
-
-  async function load() {
-    try {
-      const raw = await readFile(normalizedFilePath, "utf8");
-      const parsed = JSON.parse(raw) as Record<string, boolean>;
-      for (const [key, value] of Object.entries(parsed)) {
-        if (value) cache.set(key, true);
-      }
-    } catch {
-      await mkdir(dirname(normalizedFilePath), { recursive: true });
-    }
-  }
-
-  const init = load();
-
+/** Armazém persistente: um hash por linha. Um único processo por arquivo. */
+export function createFileNullifierStore(path: string): NullifierStore {
+  mkdirSync(dirname(path), { recursive: true });
+  const used = new Set<string>(existsSync(path) ? readFileSync(path, "utf8").split("\n").map((l) => l.trim()).filter(Boolean) : []);
+  const check = (key: string) => {
+    if (key.length === 0 || /[\r\n]/.test(key)) throw new Error("Chave inválida.");
+  };
   return {
-    async consume(action: string, nullifierHash: string) {
-      await init;
-      const key = createHash("sha256").update(`${action}:${nullifierHash}`).digest("hex");
-      if (cache.has(key)) return false;
-      cache.set(key, true);
-      await writeFile(normalizedFilePath, JSON.stringify(Object.fromEntries(cache), null, 2), "utf8");
+    async has(key) {
+      return used.has(key);
+    },
+    async claim(key) {
+      check(key);
+      if (used.has(key)) return false;
+      used.add(key);
+      appendFileSync(path, key + "\n");
       return true;
     },
-    async release(action: string, nullifierHash: string) {
-      await init;
-      const key = createHash("sha256").update(`${action}:${nullifierHash}`).digest("hex");
-      cache.delete(key);
-      await writeFile(normalizedFilePath, JSON.stringify(Object.fromEntries(cache), null, 2), "utf8");
+    async release(key) {
+      if (!used.delete(key)) return;
+      writeFileSync(path, [...used].map((k) => k + "\n").join(""));
     },
   };
 }

@@ -1,19 +1,25 @@
-import { HostNotAllowedError } from "./errors";
-import { getDefaultPolicy, isAllowed } from "./policy";
-import type { NetworkPolicy } from "./types";
+import { HostNotAllowedError } from "./errors.ts";
+import { isAllowed, type NetworkPolicy } from "./policy.ts";
 
-/**
- * `fetch` com allowlist. Se o host não estiver na política, rejeita com
- * `HostNotAllowedError` antes de emitir qualquer chamada de rede.
- */
-export async function guardedFetch(
-  url: string | URL,
-  init?: RequestInit,
-  policy?: NetworkPolicy,
-): Promise<Response> {
-  const activePolicy = policy ?? getDefaultPolicy();
-  if (!isAllowed(url, activePolicy)) {
-    throw new HostNotAllowedError(typeof url === "string" ? url : url.toString());
-  }
-  return fetch(url, init);
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+/** Envolve um `fetch`: recusa, antes de qualquer chamada, hosts fora da política. */
+export function guardedFetch(policy: NetworkPolicy, base: typeof fetch = globalThis.fetch): typeof fetch {
+  return async (input, init) => {
+    const url = urlOf(input);
+    if (!isAllowed(policy, url)) {
+      let host = url;
+      try {
+        host = new URL(url).hostname;
+      } catch {
+        /* url inválida: devolve o texto original no erro */
+      }
+      throw new HostNotAllowedError(host, url);
+    }
+    return base(input, init);
+  };
 }

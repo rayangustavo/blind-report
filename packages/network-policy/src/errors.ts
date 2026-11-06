@@ -1,26 +1,15 @@
-export class NetworkPolicyError extends Error {
+/** O host da requisição não está na lista declarada. */
+export class HostNotAllowedError extends Error {
+  constructor(public readonly host: string, public readonly url: string) {
+    super(`Host não permitido pela política de rede: ${host}`);
+    this.name = "HostNotAllowedError";
+  }
+}
+
+/** A configuração de rede é inválida ou tenta algo que o projeto não permite. */
+export class InvalidNetworkConfigError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "NetworkPolicyError";
-  }
-}
-
-export class HostNotAllowedError extends Error {
-  readonly url: string;
-
-  constructor(url: string) {
-    super(`host is not allowed by the network policy: ${url}`);
-    this.name = "HostNotAllowedError";
-    this.url = url;
-  }
-}
-
-export class RpcError extends Error {
-  readonly code?: number;
-
-  constructor(message: string, code?: number) {
-    super(message);
-    this.name = "RpcError";
-    this.code = code;
+    this.name = "InvalidNetworkConfigError";
   }
 }

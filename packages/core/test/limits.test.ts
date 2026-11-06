@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { ARKIV_MAX_BYTES, ARKIV_PRACTICAL_ENTITY_BYTES, ENS_KEYS, PART_PAYLOAD_BYTES } from "../src/limits";
+import { ARKIV_MAX_BYTES, ARKIV_PRACTICAL_ENTITY_BYTES, DEFAULT_MAX_BYTES, ENS_KEYS, PART_PAYLOAD_BYTES } from "../src/index.ts";
 
-describe("limits", () => {
-  it("keeps the protocol constants stable", () => {
-    expect(ARKIV_MAX_BYTES).toBe(131_072);
-    expect(ARKIV_PRACTICAL_ENTITY_BYTES).toBe(120_000);
-    expect(PART_PAYLOAD_BYTES).toBe(100_000);
+describe("limites e constantes", () => {
+  it("limite_de_parte_cabe_com_folga_no_limite_pratico_da_entidade", () => {
+    expect(ARKIV_PRACTICAL_ENTITY_BYTES).toBeLessThan(ARKIV_MAX_BYTES);
+    expect(ARKIV_PRACTICAL_ENTITY_BYTES - PART_PAYLOAD_BYTES).toBeGreaterThanOrEqual(4096); // cabeçalho do envelope e chaves embrulhadas
   });
 
-  it("exposes the ENS record keys", () => {
-    expect(ENS_KEYS).toEqual({
-      KEY: "denuncia.key",
-      VERSION: "denuncia.version",
-      POLICY: "denuncia.policy",
-      READER_KEY: "denuncia.readerkey",
-    });
+  it("o_tamanho_padrao_da_politica_e_razoavel", () => {
+    expect(DEFAULT_MAX_BYTES).toBeGreaterThan(0);
+    expect(DEFAULT_MAX_BYTES).toBeLessThanOrEqual(10 * 1024 * 1024);
+  });
+
+  it("as_chaves_de_texto_do_ens_sao_unicas_e_prefixadas", () => {
+    const values = Object.values(ENS_KEYS);
+    expect(new Set(values).size).toBe(values.length);
+    for (const v of values) expect(v.startsWith("denuncia.")).toBe(true);
   });
 });

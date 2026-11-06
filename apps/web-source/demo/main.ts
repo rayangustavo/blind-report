@@ -1,6 +1,6 @@
 // Demo local da interface da fonte, com backend SIMULADO.
-// O `main` do repositório está com APIs divergentes entre pacotes e não compila;
-// esta entrada exercita a UI/controller reais com respostas falsas em memória.
+// A entrada exercita a UI/controller reais com respostas falsas em memória,
+// sem depender de relayer, ENS ou World ID configurados.
 import { toBase64Url } from "@blind-report/core";
 import { SourceError } from "@blind-report/source-client";
 import { cancellable, createSourceController, type SourceState } from "../src/controller.ts";

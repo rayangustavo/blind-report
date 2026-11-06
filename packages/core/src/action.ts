@@ -1,28 +1,22 @@
-import { InvalidEpochError, InvalidNewsroomNameError } from "./errors";
-import { isEpoch } from "./epoch";
+import { isEpoch } from "./epoch.ts";
 
-const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
-const MAX_NAME_LENGTH = 255;
-const MAX_LABEL_LENGTH = 63;
-
-/**
- * Um nome de redação é um nome ENS terminado em `.eth`, com labels em
- * minúsculas formadas por `a-z`, `0-9` e `-` (sem hífen nas pontas).
- */
-export function isNewsroomName(name: string): boolean {
-  if (typeof name !== "string" || name.length === 0 || name.length > MAX_NAME_LENGTH) return false;
-  if (!name.endsWith(".eth")) return false;
-  return name.split(".").every(
-    (label) => label.length > 0 && label.length <= MAX_LABEL_LENGTH && LABEL_RE.test(label),
-  );
+export class InvalidNewsroomNameError extends Error {
+  constructor(name: string) {
+    super(`Nome de redação inválido: "${name}"`);
+    this.name = "InvalidNewsroomNameError";
+  }
 }
 
-/**
- * Ação assinada pela World ID para uma submissão: `submit:<newsroom>:<epoch>`.
- * A ação amarra a prova de humanidade à redação e ao período exatos.
- */
-export function actionFor(newsroom: string, epoch: string): string {
+const NEWSROOM_RE = /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+eth$/;
+
+/** Nome ENS em minúsculas terminado em .eth (nomes e subnomes). */
+export function isNewsroomName(name: string): boolean {
+  return NEWSROOM_RE.test(name);
+}
+
+/** Ação da prova do World ID: `submit:<redação>:<época>`. */
+export function actionFor(newsroom: string, epoch: number): string {
   if (!isNewsroomName(newsroom)) throw new InvalidNewsroomNameError(newsroom);
-  if (!isEpoch(epoch)) throw new InvalidEpochError(epoch);
+  if (!isEpoch(epoch)) throw new RangeError(`Época inválida: ${epoch}`);
   return `submit:${newsroom}:${epoch}`;
 }
