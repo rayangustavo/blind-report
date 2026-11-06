@@ -384,3 +384,113 @@ footer {
   flex-direction: column;
   gap: 0.35rem;
 }
+
+/* ==============================================================================
+   ETHGlobal Judging Mode & Crypto Pipeline Stepper
+   ============================================================================== */
+.judging-preset-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.15), rgba(59, 130, 246, 0.15));
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.95rem;
+  margin-bottom: 1.25rem;
+  backdrop-filter: blur(10px);
+}
+
+.judging-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #34d399;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  letter-spacing: 0.03em;
+}
+
+.btn-preset {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-preset:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5);
+  filter: brightness(1.1);
+}
+
+.crypto-pipeline-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  margin: 1.25rem 0 1.5rem;
+  padding: 0.75rem 0.5rem;
+  background: rgba(17, 24, 39, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.step-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.step-pill.active {
+  color: #fff;
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+.step-pill.done {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.step-num {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+
+.step-pill.active .step-num {
+  background: var(--accent);
+  color: #000;
+  font-weight: 800;
+}
+
+.step-arrow {
+  color: var(--border-highlight);
+  font-size: 0.85rem;
+}
+

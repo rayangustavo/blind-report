@@ -57,6 +57,40 @@ async function start() {
 
   const err = (s: SourceState) => (s.error ? h("p", { className: "error", role: "alert" }, s.error.message) : null);
 
+  let demoPresetActive = false;
+
+  function judgingPresetBar(s: SourceState): HTMLElement {
+    return h("div", { className: "judging-preset-bar" },
+      h("span", { className: "judging-badge" }, "⚡ ETHGlobal Mumbai Judging Mode"),
+      h("button", {
+        className: "btn-preset",
+        onclick: async () => {
+          demoPresetActive = true;
+          if (s.step === "newsroom") {
+            await controller.lookup("jornal-livre.eth");
+          }
+        },
+      }, "⚡ 1-Click Load: \"Procurement Corruption\" Leak")
+    );
+  }
+
+  function cryptoPipelineStepper(s: SourceState): HTMLElement {
+    const currentStep = s.step === "newsroom" ? 1 : s.step === "compose" ? 2 : s.step === "proof" ? 3 : 4;
+    return h("div", { className: "crypto-pipeline-stepper" },
+      h("span", { className: `step-pill ${currentStep === 1 ? "active" : currentStep > 1 ? "done" : ""}` },
+        h("span", { className: "step-num" }, "1"), "ENSv2 PKI & Discovery"),
+      h("span", { className: "step-arrow" }, "→"),
+      h("span", { className: `step-pill ${currentStep === 2 ? "active" : currentStep > 2 ? "done" : ""}` },
+        h("span", { className: "step-num" }, "2"), "Libsodium Seal"),
+      h("span", { className: "step-arrow" }, "→"),
+      h("span", { className: `step-pill ${currentStep === 3 ? "active" : currentStep > 3 ? "done" : ""}` },
+        h("span", { className: "step-num" }, "3"), "World ID ZKP Anti-Sybil"),
+      h("span", { className: "step-arrow" }, "→"),
+      h("span", { className: `step-pill ${currentStep === 4 ? "active" : ""}` },
+        h("span", { className: "step-num" }, "4"), "Arkiv Custody & Receipt")
+    );
+  }
+
   function partnerRibbon(): HTMLElement {
     return h("div", { className: "partner-ribbon" },
       h("span", { className: "partner-badge ens", title: "Ethereum Name Service: PKI Descentralizada & Descoberta" }, h("span", { className: "dot" }), "ENSv2: Sepolia"),
@@ -83,8 +117,9 @@ async function start() {
 
   function viewSend(s: SourceState): Node {
     if (s.step === "newsroom") {
-      const name = h("input", { type: "text", id: "nr", placeholder: "investiga.eth", autocomplete: "off" });
+      const name = h("input", { type: "text", id: "nr", placeholder: "jornal-livre.eth", autocomplete: "off", value: demoPresetActive ? "jornal-livre.eth" : "" });
       return h("section", {},
+        cryptoPipelineStepper(s),
         h("h2", {}, "Para qual redação deseja enviar?"), err(s),
         h("div", { className: "card ens-card" },
           h("div", { className: "partner-card-header" }, h("span", { className: "partner-tag" }, "Descoberta via ENSv2"), h("strong", {}, "Ethereum Name Service")),
@@ -96,9 +131,17 @@ async function start() {
     if (s.step === "compose" && s.newsroom) {
       const n = s.newsroom;
       const cat = h("select", { id: "cat" }, ...n.categories.map((c) => h("option", { value: c }, c)));
-      const text = h("textarea", { id: "txt", placeholder: "Descreva os fatos detalhadamente com nomes, datas e locais..." });
+      const defaultText = demoPresetActive ? "CONFIDENTIAL LEAK: Emergency municipal infrastructure contracts (EM-2026-99) totaling $14.2M were awarded without competitive bidding, redirecting public treasury funds." : "";
+      const text = h("textarea", { id: "txt", placeholder: "Descreva os fatos detalhadamente com nomes, datas e locais..." }, defaultText);
       const file = h("input", { type: "file", id: "file" });
+
+      const fillDemoData = () => {
+        text.value = "CONFIDENTIAL LEAK: Emergency municipal infrastructure contracts (EM-2026-99) totaling $14.2M were awarded without competitive bidding, redirecting public treasury funds.";
+        if (cat.options.length > 0 && cat.options[0]) cat.value = cat.options[0].value;
+      };
+
       return h("section", {},
+        cryptoPipelineStepper(s),
         h("div", { className: "card ens-card" },
           h("div", { className: "partner-card-header" },
             h("span", { className: "partner-tag" }, "ENSv2: Redação Verificada"),
@@ -107,6 +150,8 @@ async function start() {
           h("p", { className: "muted" }, `Chave pública ativa: versão ${n.version} (resolvida de denuncia.pubkey)`),
           h("p", { className: "muted" }, `Regras editoriais: ${n.categories.join(", ")} · Máximo: ${Math.round(n.maxBytes / 1024)} KiB · Anexos: ${n.attachments ? "Sim" : "Não"}`)),
         err(s),
+        h("div", { style: "display: flex; justify-content: flex-end; margin-bottom: 0.5rem;" },
+          h("button", { className: "btn-link", onclick: fillDemoData }, "⚡ Auto-preencher caso de teste para jurados")),
         h("label", { htmlFor: "cat" }, "Categoria"), cat,
         h("label", { htmlFor: "txt" }, "Texto confidencial"), text,
         n.attachments ? h("label", { htmlFor: "file" }, "Anexo confidencial (opcional)") : null, n.attachments ? file : null,
@@ -115,7 +160,13 @@ async function start() {
           className: "btn-primary",
           onclick: async () => {
             const f = file.files?.[0];
-            const attachment = f ? { name: f.name, data: await readFileBytes(f) } : undefined;
+            let attachment = f ? { name: f.name, data: await readFileBytes(f) } : undefined;
+            if (!attachment && demoPresetActive) {
+              attachment = {
+                name: "procurement-contracts-leak.csv",
+                data: new TextEncoder().encode("vendor_id,contract_id,amount_usd,notes\n10492,EM-2026-99,14200000,DIRECT_AWARD_NO_BID"),
+              };
+            }
             await controller.submit({ category: cat.value, text: text.value, attachment });
           },
         }, "Continuar para Prova ZKP"));
@@ -136,6 +187,7 @@ async function start() {
       };
 
       return h("section", {},
+        cryptoPipelineStepper(s),
         h("div", { className: "card worldid-card" },
           h("div", { className: "partner-card-header" },
             h("span", { className: "partner-tag" }, "World ID Protocol 4.0"),
@@ -153,7 +205,20 @@ async function start() {
     let parsed: ReturnType<typeof parseReceipt> | undefined;
     try { if (s.receiptText) parsed = parseReceipt(s.receiptText); } catch {}
 
+    const openInReplies = () => {
+      tab = "respostas";
+      render(controller.state);
+      setTimeout(() => {
+        const rcEl = document.getElementById("rc") as HTMLTextAreaElement | null;
+        if (rcEl && s.receiptText) {
+          rcEl.value = s.receiptText;
+          void controller.loadReplies(s.receiptText);
+        }
+      }, 50);
+    };
+
     return h("section", {},
+      cryptoPipelineStepper(s),
       h("h2", { className: "ok" }, "✔ Denúncia Cifrada e Persistida"),
       parsed ? h("div", { className: "card arkiv-card" },
         h("div", { className: "partner-card-header" },
@@ -166,7 +231,8 @@ async function start() {
       h("p", { className: "warn" }, "GUARDE O RECIBO AGORA. Ele contém a chave da sua caixa postal anônima e o sal criptográfico para ler respostas e provar autoria futura."),
       h("div", { style: "display: flex; gap: 0.5rem; flex-wrap: wrap;" },
         h("button", { className: "btn-primary", onclick: () => download("recibo-blind-report.json", s.receiptText!) }, "Baixar recibo (.json)"),
-        h("button", { className: "btn-secondary", onclick: () => navigator.clipboard?.writeText(s.receiptText!) }, "Copiar recibo")),
+        h("button", { className: "btn-secondary", onclick: () => navigator.clipboard?.writeText(s.receiptText!) }, "Copiar recibo"),
+        h("button", { className: "btn-preset", onclick: openInReplies }, "⚡ Consultar Caixa Postal deste Recibo →")),
       h("label", { style: "margin: 1rem 0; display: flex; align-items: center; gap: 0.5rem;" },
         h("input", { type: "checkbox", onchange: () => controller.confirmReceiptSaved() }), " Confirmo que salvei meu recibo em local seguro"),
       h("button", { className: "btn-secondary", onclick: () => controller.finish(), disabled: !s.receiptSaved }, "Concluir"));
@@ -226,7 +292,7 @@ async function start() {
     const foot = h("footer", { className: "muted" },
       h("span", {}, `RPC: ${new URL(config.rpcUrl).hostname} · Relayer: ${new URL(config.relayerUrl).hostname} · Arkiv: ${new URL(config.arkivRpcUrl).hostname}`),
       h("span", {}, "Para proteger sua rede, escolha por conta própria uma VPN ou outra proteção, fora deste aplicativo."));
-    root.replaceChildren(h("main", {}, h("h1", {}, "Blind Report"), partnerRibbon(), partnerArchitectureDrawer(), nav, body, foot));
+    root.replaceChildren(h("main", {}, h("h1", {}, "Blind Report"), judgingPresetBar(s), partnerRibbon(), partnerArchitectureDrawer(), nav, body, foot));
   }
 
   controller.subscribe(render);
@@ -234,3 +300,4 @@ async function start() {
 }
 
 start().catch(() => { document.getElementById("app")!.textContent = "Não foi possível iniciar o aplicativo. Verifique a configuração."; });
+
