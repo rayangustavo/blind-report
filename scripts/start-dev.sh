@@ -26,9 +26,21 @@ if ps -ef | grep -E 'WEBSITE/node_modules/.bin/next dev|next-server .*WEBSITE' |
   pkill -f 'next-server.*WEBSITE' || true
 fi
 
+RELAYER_PORT="${RELAYER_PORT:-8787}"
+
+if ! curl -sf "http://127.0.0.1:${RELAYER_PORT}/health" >/dev/null 2>&1; then
+  echo -e "${YELLOW}Iniciando backend Relayer na porta ${RELAYER_PORT}...${NC}"
+  node --env-file=.env --import tsx apps/relayer/src/main.ts >/dev/null 2>&1 &
+  RELAYER_PID=$!
+  trap 'kill $RELAYER_PID 2>/dev/null || true' EXIT INT TERM
+else
+  echo -e "${GREEN}Backend Relayer já ativo na porta ${RELAYER_PORT}.${NC}"
+fi
+
 echo -e "${YELLOW}Iniciando portal unificado Next.js 16 (WEBSITE)...${NC}"
-echo -e "${BOLD}Portal pronto para uso no navegador:${NC}"
+echo -e "${BOLD}Serviços prontos para uso no navegador:${NC}"
 echo -e "  • ${CYAN}Blind Report (Denúncia & Redação):${NC}    ${BOLD}http://127.0.0.1:${PORT}${NC}"
+echo -e "  • ${CYAN}Relayer Backend (Arkiv & World ID):${NC}  ${BOLD}http://127.0.0.1:${RELAYER_PORT}${NC}"
 echo -e "\nPressione ${YELLOW}Ctrl+C${NC} para encerrar o servidor.\n"
 
-exec npm --prefix WEBSITE run dev -- --hostname "$HOST" --port "$PORT" "$@"
+npm --prefix WEBSITE run dev -- --hostname "$HOST" --port "$PORT" "$@"
