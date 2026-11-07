@@ -464,9 +464,14 @@ export function createWebsiteController(
       const chainId = tx.chainId ?? SEPOLIA_SPEC.chainId
       const cleanHash = tx.hash.replace(/^(0x)+/, '0x')
       const explorer = tx.chainId === 'rabdi'
-        ? 'https://rabdi.explorer.arkiv.network'
+        ? 'https://rabdi.explorer.arkiv.network/entity-explorer'
         : (SEPOLIA_SPEC.blockExplorerUrls[0] ?? 'https://sepolia.etherscan.io')
-      const url = tx.url ?? `${explorer.replace(/\/+$/, '')}/?search=${encodeURIComponent(cleanHash)}`
+      const arkivQuery = `key(${cleanHash})`
+      const url = tx.url ?? (
+        tx.chainId === 'rabdi'
+          ? `${explorer}?q=${encodeURIComponent(arkivQuery)}`
+          : `${explorer.replace(/\/+$/, '')}/tx/${cleanHash}`
+      )
       const record: OnChainTxRecord = {
         hash: cleanHash,
         label: tx.label,
@@ -1197,7 +1202,7 @@ export function createWebsiteController(
         controller.setLastTx({
           hash: onchainHash,
           chainId: 'rabdi',
-          url: `https://rabdi.explorer.arkiv.network/?search=${encodeURIComponent(onchainHash)}`,
+          url: `https://rabdi.explorer.arkiv.network/entity-explorer?q=${encodeURIComponent(`key(${onchainHash})`)}`,
           label: `Tip Encrypted & Gas-Sponsored on Arkiv via Relayer (${SHOWCASE_ACCOUNTS.relayer.slice(0, 6)}...${SHOWCASE_ACCOUNTS.relayer.slice(-4)})`,
         })
 
