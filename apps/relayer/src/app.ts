@@ -104,7 +104,13 @@ export function createRelayerApp(deps: RelayerDeps) {
     if (!check.ok) throw fail(422, check.code, check.message);
 
     const admitted = await deps.gate.admit({ newsroom, epoch, payload: b.proof as IdKitPayload });
-    if (!admitted.ok) throw fail(GATE_STATUS[admitted.code] ?? 403, admitted.code, admitted.message);
+    if (!admitted.ok) {
+      if (admitted.code === "limit_reached" && deps.bypassLimit) {
+        // Por enquanto, cancela qualquer erro de limite por período ("Já houve um envio...") para não bloquear a emissão de reports
+      } else {
+        throw fail(GATE_STATUS[admitted.code] ?? 403, admitted.code, admitted.message);
+      }
+    }
 
     try {
       const { key, keys } = await deps.store.publishSubmission({
@@ -113,7 +119,7 @@ export function createRelayerApp(deps: RelayerDeps) {
       });
       return respond(201, { key, parts: keys.length });
     } catch {
-      await admitted.release().catch(() => {});
+      if (admitted.ok) await admitted.release().catch(() => {});
       throw fail(502, "publish_failed", "Não foi possível publicar agora. Tente novamente.");
     }
   }

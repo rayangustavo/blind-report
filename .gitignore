@@ -4,12 +4,16 @@ coverage
 .env
 .env.*
 !.env.example
+!**/.env.example
 data
 *.log
 .DS_Store
 apps/web-source/dist
 apps/web-newsroom/dist
 .~lock.*
+.vercel
+.next
+WEBSITE/.next
 
 # Work planning folders & instructions (never commit)
 person-1/

@@ -3,4 +3,4 @@ export type { IdKitPayload, NullifierStore, Verifier, VerifyResult } from "./typ
 export { createRpContextSigner, type RpContext } from "./rpContext.ts";
 export { createSimulatedVerifier, createWorldVerifier } from "./verifier.ts";
 export { createFileNullifierStore, createMemoryNullifierStore, usedKey } from "./store.ts";
-export { createSubmissionGate, type AdmitResult, type RefusalCode } from "./gate.ts";
+export { createSubmissionGate, type AdmitResult, type RefusalCode, type SubmissionGateOptions } from "./gate.ts";

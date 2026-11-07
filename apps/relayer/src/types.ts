@@ -28,4 +28,6 @@ export type RelayerDeps = {
   allowUnregisteredNewsrooms?: string[];
   /** Limite global de requisições (opcional). */
   limiter?: { tryTake(): boolean };
+  /** Cancela rejeição por duplicidade no mesmo período para testes/demos. */
+  bypassLimit?: boolean;
 };

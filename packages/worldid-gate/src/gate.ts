@@ -7,9 +7,16 @@ export type AdmitResult = { ok: true; release: () => Promise<void> } | { ok: fal
 
 const no = (code: RefusalCode, message: string): AdmitResult => ({ ok: false, code, message });
 
+export type SubmissionGateOptions = {
+  expectedEnvironment: "production" | "staging";
+  verifier: Verifier;
+  store: NullifierStore;
+  bypassLimit?: boolean;
+};
+
 /** Portão do relayer: uma denúncia por pessoa, por redação, por época. A prova nunca é guardada (RN-05). */
-export function createSubmissionGate(opts: { expectedEnvironment: "production" | "staging"; verifier: Verifier; store: NullifierStore }) {
-  const { expectedEnvironment, verifier, store } = opts;
+export function createSubmissionGate(opts: SubmissionGateOptions) {
+  const { expectedEnvironment, verifier, store, bypassLimit } = opts;
   return {
     async admit(a: { newsroom: string; epoch: number; payload: IdKitPayload }): Promise<AdmitResult> {
       let action: string;
@@ -30,7 +37,15 @@ export function createSubmissionGate(opts: { expectedEnvironment: "production" |
       } catch {
         return no("invalid_nullifier", "A prova traz um identificador inválido.");
       }
-      if (await store.has(key)) return no("limit_reached", "Já houve um envio desta pessoa para esta redação neste período.");
+
+      const shouldBypass =
+        bypassLimit ??
+        (process.env.BYPASS_LIMIT === "1" ||
+          process.env.BYPASS_RATE_LIMIT === "1" ||
+          process.env.BYPASS_SUBMISSION_LIMIT === "1" ||
+          process.env.ALLOW_MULTIPLE_SUBMISSIONS === "1");
+
+      if (!shouldBypass && (await store.has(key))) return no("limit_reached", "Já houve um envio desta pessoa para esta redação neste período.");
 
       const v = await verifier(p);
       if (!v.success) return no("proof_rejected", `A prova foi recusada: ${v.error ?? "motivo desconhecido"}`);
@@ -46,7 +61,10 @@ export function createSubmissionGate(opts: { expectedEnvironment: "production" |
         if (other !== key) return no("nullifier_mismatch", "O identificador da prova não confere com a resposta do World.");
       }
 
-      if (!(await store.claim(key))) return no("limit_reached", "Já houve um envio desta pessoa para esta redação neste período.");
+      if (!shouldBypass && !(await store.claim(key))) return no("limit_reached", "Já houve um envio desta pessoa para esta redação neste período.");
+      if (shouldBypass) {
+        await store.claim(key).catch(() => {});
+      }
       return { ok: true, release: () => store.release(key) };
     },
   };

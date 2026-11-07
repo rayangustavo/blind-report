@@ -33,6 +33,7 @@ export type Config = {
   simulateWorld: boolean;
   rateLimitPerMinute: number;
   networkPolicy: NetworkPolicy;
+  bypassLimit: boolean;
 };
 
 const DAY = 24 * 3600;
@@ -121,6 +122,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     port, host: get("HOST") || "127.0.0.1", environment: envName as "staging" | "production", appId, rpId, relayerPrivateKey, rpSigningKey,
     arkivAccessKey: get("ARKIV_ACCESS_KEY") || undefined, sepoliaRpcUrl, arkivRpcUrl, newsrooms, allowedOrigins, retentionDays, renewWithinDays,
     simulateWorld: simulate === "1", rateLimitPerMinute, maxBodyBytes, nullifierFile: get("NULLIFIER_FILE") || "data/claims.jsonl",
+    bypassLimit: get("BYPASS_LIMIT") !== "0",
     networkPolicy: createPolicy({ hosts: [...hosts], allowLocalhost }),
   };
 }

@@ -11,6 +11,7 @@
     "WEBSITE"
   ],
   "scripts": {
+    "build": "npm --prefix WEBSITE run build",
     "guardrails": "node guardrails/check.mjs",
     "test:guardrails": "node --test guardrails/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",

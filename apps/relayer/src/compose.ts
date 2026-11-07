@@ -40,7 +40,7 @@ export function composeRelayer(config: Config, overrides: ComposeOverrides = {})
   const store = createStore(backend);
 
   const verifier = overrides.verifier ?? (config.simulateWorld ? createSimulatedVerifier() : createWorldVerifier({ rpId: config.rpId, fetch: guarded }));
-  const gate = createSubmissionGate({ expectedEnvironment: config.environment, verifier, store: createFileNullifierStore(config.nullifierFile) });
+  const gate = createSubmissionGate({ expectedEnvironment: config.environment, verifier, store: createFileNullifierStore(config.nullifierFile), bypassLimit: config.bypassLimit });
   const signer = createRpContextSigner({ signingKeyHex: config.rpSigningKey, rpId: config.rpId });
   const day = 24 * 3600;
 
@@ -48,6 +48,7 @@ export function composeRelayer(config: Config, overrides: ComposeOverrides = {})
     reader, store, gate, signer, logger, now: overrides.now ?? (() => new Date()), appId: config.appId, environment: config.environment,
     limiter: createRateLimiter({ perMinute: config.rateLimitPerMinute, now: () => Date.now() }), maxBodyBytes: config.maxBodyBytes, retentionSeconds: config.retentionDays * day, allowedOrigins: config.allowedOrigins,
     allowUnregisteredNewsrooms: config.newsrooms,
+    bypassLimit: config.bypassLimit,
   });
   const renewal = createRenewalJob({
     store, newsrooms: config.newsrooms, withinSeconds: config.renewWithinDays * day, retentionSeconds: config.retentionDays * day,

@@ -58,3 +58,31 @@ To execute the live protocol flow from scratch transmitting fresh transactions o
 # Execute the live Sepolia script (requires funded OWNER account in .env)
 npm run test:sepolia:flow
 ```
+
+---
+
+## 5. Frontend Deployment on Vercel
+
+The Blind Report web application is 100% prepared for instant deployment on Vercel:
+
+### Option A: Standard Repository Import (Recommended)
+1. In the Vercel Dashboard, import the Git repository.
+2. Keep the **Root Directory** as `./` (default).
+3. Vercel automatically detects [`vercel.json`](file:///l/disk0/rayang/devcon8/ethglobal/project/blind-report/vercel.json), uses `npm install` for monorepo workspace dependencies, and executes `npm run build` targeting `WEBSITE/.next`.
+
+### Option B: Subdirectory Root (`WEBSITE`)
+1. In Vercel Project Settings, set **Root Directory** to `WEBSITE`.
+2. Ensure *"Include source files outside of the Root Directory in the Build Step"* is enabled (Vercel default).
+3. [`WEBSITE/vercel.json`](file:///l/disk0/rayang/devcon8/ethglobal/project/blind-report/WEBSITE/vercel.json) seamlessly routes the build.
+
+### Environment Variables for Vercel
+Add the following in **Vercel Project Settings > Environment Variables**:
+
+| Variable | Required | Default / Recommended | Purpose |
+| :--- | :--- | :--- | :--- |
+| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | No | `https://ethereum-sepolia-rpc.publicnode.com` | Public RPC endpoint for Sepolia on-chain ENSv2 resolution |
+| `NEXT_PUBLIC_RELAYER_URL` | No | `http://127.0.0.1:8787` | Endpoint for the gas-sponsoring Relayer node |
+| `WORLD_APP_ID` | No | `app_4042c24254a33097907e995869d6e132` | World ID App identifier |
+| `WORLD_RP_ID` | No | `rp_4847560e061aacf6` | World ID Relying Party identifier |
+| `RP_SIGNING_KEY` | No | Pre-configured staging key | Private key for `/api/rp-context` serverless signing |
+| `WORLD_ENVIRONMENT` | No | `staging` | `staging` or `production` |
