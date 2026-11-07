@@ -29,14 +29,10 @@ export function parsePolicy(text: string): NewsroomPolicy {
   const cats = o.categories;
   if (!Array.isArray(cats) || cats.length === 0) throw new PolicyError("categories", "A política precisa de ao menos uma categoria.");
   if (cats.length > MAX_CATEGORIES) throw new PolicyError("categories", `A política aceita no máximo ${MAX_CATEGORIES} categorias.`);
-  const normalized: string[] = [];
   for (const c of cats) {
-    if (typeof c !== "string") throw new PolicyError("categories", `Categoria inválida: ${JSON.stringify(c)}`);
-    const n = c.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    if (!CATEGORY_RE.test(n)) throw new PolicyError("categories", `Categoria inválida: ${JSON.stringify(c)}`);
-    normalized.push(n);
+    if (typeof c !== "string" || !CATEGORY_RE.test(c)) throw new PolicyError("categories", `Categoria inválida: ${JSON.stringify(c)}`);
   }
-  if (new Set(normalized).size !== normalized.length) throw new PolicyError("categories", "Categorias repetidas.");
+  if (new Set(cats).size !== cats.length) throw new PolicyError("categories", "Categorias repetidas.");
 
   const maxBytes = o.maxBytes ?? DEFAULT_MAX_BYTES;
   if (typeof maxBytes !== "number" || !Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_POLICY_BYTES) {
@@ -49,5 +45,5 @@ export function parsePolicy(text: string): NewsroomPolicy {
   const epoch = o.epoch ?? "monthly";
   if (epoch !== "monthly") throw new PolicyError("epoch", 'Só a época "monthly" é suportada.');
 
-  return { categories: normalized, maxBytes, attachments, epoch: "monthly" };
+  return { categories: cats as string[], maxBytes, attachments, epoch: "monthly" };
 }

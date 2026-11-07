@@ -74,16 +74,19 @@ export function useWebsiteController(initialDeps?: WebsiteDeps, options?: Contro
     // Owner (Admin)
     registerNewsroom: controller.registerNewsroom.bind(controller),
     rotateKey: controller.rotateKey.bind(controller),
+    updatePolicy: controller.updatePolicy.bind(controller),
     exportBackup: controller.exportBackup.bind(controller),
     importBackup: controller.importBackup.bind(controller),
     addJournalist: controller.addJournalist.bind(controller),
     revokeJournalist: controller.revokeJournalist.bind(controller),
+    renewJournalist: controller.renewJournalist.bind(controller),
     shareKeyring: controller.shareKeyring.bind(controller),
     renewSubmission: controller.renewSubmission.bind(controller),
 
     // Journalist
     newReaderKey: controller.newReaderKey.bind(controller),
     importSharedKeyring: controller.importSharedKeyring.bind(controller),
+    resolveOnChainReaderKey: controller.resolveOnChainReaderKey.bind(controller),
     decryptSelectedReport: controller.decryptSelectedReport.bind(controller),
     saveInternalNote: controller.saveInternalNote.bind(controller),
     updateReportStatus: controller.updateReportStatus.bind(controller),

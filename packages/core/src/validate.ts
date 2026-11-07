@@ -5,7 +5,13 @@ export type SubmissionRefusalCode = "category_not_allowed" | "too_large" | "atta
 export type SubmissionCheck = { ok: true } | { ok: false; code: SubmissionRefusalCode; message: string };
 
 export function normalizeCategoryName(category: string): string {
-  return category.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return category
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
 }
 
 /** Confere um envio contra a política da redação. */

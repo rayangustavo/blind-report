@@ -2,7 +2,7 @@ import type { Authorize, createStore, Status, Submission } from "@blind-report/a
 import { ENS_KEYS, decodePayload, encodeReply, fromBase64Url, parsePolicy, PolicyError, toBase64Url, type Attachment, type NewsroomPolicy, type Payload } from "@blind-report/core";
 import { CryptoError, decodeEnvelope, lockWithPassword, mailboxId, newKeypair, open, openSealed, sealReply, sealTo, unlockWithPassword, verifyContentHash, type Keypair } from "@blind-report/crypto";
 import { createAuthority, type AdminStep, type createAdmin, type Newsroom, type NewsroomInfo } from "@blind-report/ens-client";
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import { NewsroomError } from "./errors.ts";
 import { asKeypair, keysFromJson, keysToJson, type KeyEntry } from "./keyring.ts";
 
@@ -96,9 +96,20 @@ export function createNewsroomClient(deps: NewsroomDeps) {
       }
     },
 
-    async rotateKey(): Promise<number> {
+    async rotateKey(targetVersion?: number): Promise<number> {
       const n = need(ens);
-      const next = newKey(Math.max(0, ...keys.keys()) + 1);
+      let nextVersion = targetVersion;
+      if (nextVersion === undefined) {
+        let onChainVersion = 0;
+        try {
+          const info = await deps.reader.resolveNewsroom(n.name);
+          onChainVersion = info.pubkeyVersion ?? 0;
+        } catch {
+          // fallback se reader falhar ou ambiente de teste
+        }
+        nextVersion = Math.max(onChainVersion, ...keys.keys()) + 1;
+      }
+      const next = newKey(nextVersion);
       await admin.rotateKey({ name: n.name, resolver: n.resolver, publicKey: next.publicKey, version: next.version });
       keys.set(next.version, next);
       return next.version;
@@ -192,12 +203,12 @@ export function createNewsroomClient(deps: NewsroomDeps) {
       }
     },
 
-    async setStatus(denunciaKey: `0x${string}`, status: Status): Promise<void> {
-      await deps.store.annotate({ newsroom: name(), denunciaKey, status, journalist: deps.account, ...(deps.authorName ? { authorName: deps.authorName } : {}) });
+    async setStatus(denunciaKey: `0x${string}`, status: Status): Promise<Hex> {
+      return deps.store.annotate({ newsroom: name(), denunciaKey, status, journalist: deps.account, ...(deps.authorName ? { authorName: deps.authorName } : {}) });
     },
     statusOf: (denunciaKey: `0x${string}`) => deps.store.latestStatus(denunciaKey, authorize()),
 
-    async reply(item: Pick<Submission, "envelope">, text: string, retentionSeconds = DEFAULT_REPLY_RETENTION): Promise<void> {
+    async reply(item: Pick<Submission, "envelope">, text: string, retentionSeconds = DEFAULT_REPLY_RETENTION): Promise<Hex> {
       if (text.trim() === "") throw new NewsroomError("invalid_input", "A resposta não pode ser vazia.");
       const env = decodeEnvelope(item.envelope);
       let payload: Uint8Array;
@@ -206,7 +217,7 @@ export function createNewsroomClient(deps: NewsroomDeps) {
       } catch {
         throw new NewsroomError("invalid_input", "A resposta não pode ser vazia.");
       }
-      await deps.store.publishReply({ newsroom: name(), mailboxId: mailboxId(env.mailboxPub), sealed: sealReply(env.mailboxPub, payload), retentionSeconds, ...(deps.authorName ? { authorName: deps.authorName } : {}) });
+      return deps.store.publishReply({ newsroom: name(), mailboxId: mailboxId(env.mailboxPub), sealed: sealReply(env.mailboxPub, payload), retentionSeconds, ...(deps.authorName ? { authorName: deps.authorName } : {}) });
     },
 
     listExpiring: (withinSeconds: number) => deps.store.listExpiring({ newsroom: name(), withinSeconds }),

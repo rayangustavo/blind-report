@@ -2,6 +2,7 @@ import { currentEpoch, fromBase64Url, isEpoch, isNewsroomName, normalizeCategory
 import { CryptoError, decodeEnvelope, verifyContentHash } from "@blind-report/crypto";
 import { NewsroomNotFoundError, RecordsError } from "@blind-report/ens-client";
 import type { IdKitPayload, RefusalCode } from "@blind-report/worldid-gate";
+import type { Address } from "viem";
 import type { HttpRequest, HttpResponse, RelayerDeps } from "./types.ts";
 
 const GATE_STATUS: Record<RefusalCode, number> = {
@@ -34,9 +35,9 @@ export function createRelayerApp(deps: RelayerDeps) {
           name,
           publicKey: new Uint8Array(32).fill(7),
           pubkeyVersion: 1,
-          policy: { categories: ["corruption", "public_policy", "human_rights", "environment"], maxBytes: 200000, attachments: true, epoch: "monthly" },
+          policy: { categories: ["corruption", "public_policy", "human_rights", "environment"], maxBytes: 200000, attachments: true, epoch: "monthly" as const },
           relayers: [],
-          custodian: "0x000000000000000000000000000000000000dEaD",
+          custodian: "0x000000000000000000000000000000000000dEaD" as Address,
         };
       }
       if (e instanceof NewsroomNotFoundError) throw fail(404, "newsroom_not_found", "Redação não encontrada.");

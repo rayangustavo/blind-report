@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import {
   ArrowRight,
   BadgeCheck,
@@ -35,6 +35,7 @@ import {
 import { useWebsiteController } from '../lib/use-website-controller'
 import { STATUS_LABELS, type ReportItem } from '../lib/website-controller'
 import { RelayerStatusBadge } from '../components/relayer-status'
+import { ProductionEvaluatorCallout } from '../components/production-evaluator-callout'
 import { MetaMaskModal } from '../components/metamask-modal'
 import { OnChainTxBadge } from '../components/onchain-tx-badge'
 import { WorldIdModal } from '../components/worldid-modal'
@@ -78,13 +79,16 @@ export default function App() {
     disconnectWallet,
     registerNewsroom,
     rotateKey,
+    updatePolicy,
     exportBackup,
     importBackup,
     addJournalist,
     revokeJournalist,
+    renewJournalist,
     shareKeyring,
     renewSubmission,
     newReaderKey,
+    resolveOnChainReaderKey,
     importSharedKeyring,
     decryptSelectedReport,
     saveInternalNote,
@@ -122,6 +126,9 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      {/* AVISO DO AVALIADOR / JÚRI ETHGLOBAL */}
+      <ProductionEvaluatorCallout />
+
       {/* HEADER PRINCIPAL */}
       <header className="site-header">
         <button className="logo-button" onClick={() => navigate('home')} aria-label="Back to home">
@@ -450,16 +457,23 @@ export default function App() {
           onSaveNote={saveInternalNote}
           onUpdateStatus={updateReportStatus}
           onReply={replyToReport}
+          replies={state.replies}
           onRegisterNewsroom={registerNewsroom}
           onRotateKey={rotateKey}
+          onUpdatePolicy={updatePolicy}
           onExportBackup={exportBackup}
           onImportBackup={importBackup}
           onAddJournalist={addJournalist}
           onRevokeJournalist={revokeJournalist}
+          onRenewJournalist={renewJournalist}
           onShareKeyring={shareKeyring}
           onNewReaderKey={newReaderKey}
+          onResolveOnChainReaderKey={resolveOnChainReaderKey}
+          onchainReaderKey={state.onchainReaderKey}
           onImportSharedKeyring={importSharedKeyring}
           onRenewSubmission={renewSubmission}
+          adminStep={state.adminStep}
+          editorialPolicy={state.editorialPolicy}
           busy={state.busy}
           onBack={() => navigate('home')}
         />
@@ -610,10 +624,11 @@ export function ReportFlow({
             <label>Which newsroom do you want to submit to?</label>
             <div className="select-shell">
               <select value={newsroom} onChange={(e) => setNewsroom(e.target.value)}>
+                <option value="jornal-livre.eth">jornal-livre.eth (ENSv2 Official Sepolia)</option>
+                <option value="br53fd4i.eth">br53fd4i.eth (ENSv2 Sepolia Registered)</option>
                 <option value="jornal-livre.eth">Public Ledger</option>
                 <option value="jornal-livre.eth">City Journal</option>
                 <option value="jornal-livre.eth">Horizon Wire</option>
-                <option value="jornal-livre.eth">jornal-livre.eth (ENSv2 Official Sepolia)</option>
               </select>
               <ChevronDown size={16} />
             </div>
@@ -969,28 +984,48 @@ export function EditorialDesk({
   onReply,
   onRegisterNewsroom,
   onRotateKey,
+  onUpdatePolicy,
   onExportBackup,
   onImportBackup,
   onAddJournalist,
   onRevokeJournalist,
+  onRenewJournalist,
   onShareKeyring,
   onNewReaderKey,
+  onResolveOnChainReaderKey,
+  onchainReaderKey,
   onImportSharedKeyring,
   onRenewSubmission,
+  adminStep,
+  editorialPolicy,
+  replies = [],
   busy,
   onBack,
 }: any) {
   const [internalNoteText, setInternalNoteText] = useState('')
   const [replyText, setReplyText] = useState('')
+  const [noteSavedFeedback, setNoteSavedFeedback] = useState(false)
+  const [replyDispatchedFeedback, setReplyDispatchedFeedback] = useState(false)
+
+  useEffect(() => {
+    setInternalNoteText(selectedReport?.internalNote || '')
+  }, [selectedReport?.id, selectedReport?.internalNote])
+
   const [backupPassword, setBackupPassword] = useState('')
   const [importBackupPassword, setImportBackupPassword] = useState('')
   const [importBackupBlob, setImportBackupBlob] = useState('')
   const [newJournalistLabel, setNewJournalistLabel] = useState('')
   const [newJournalistAddr, setNewJournalistAddr] = useState('')
   const [newJournalistReaderKey, setNewJournalistReaderKey] = useState('')
+  const [newJournalistDays, setNewJournalistDays] = useState(180)
   const [shareReaderKeyInput, setShareReaderKeyInput] = useState('')
   const [importKeyringBlobInput, setImportKeyringBlobInput] = useState('')
   const [registerLabel, setRegisterLabel] = useState('folha-investigativa')
+  const [policyCategories, setPolicyCategories] = useState(
+    editorialPolicy?.categories?.join(', ') ?? 'investigacao, corrupcao, direitos-humanos'
+  )
+  const [policyMaxBytes, setPolicyMaxBytes] = useState(editorialPolicy?.maxBytes ?? 250000)
+  const [policyAttachments, setPolicyAttachments] = useState(editorialPolicy?.attachments ?? true)
 
   const isOwner = role === 'admin'
   const isJournalist = role === 'journalist'
@@ -1018,9 +1053,9 @@ export function EditorialDesk({
               </button>
             </>
           )}
-          {isJournalist && (
+          {!isOwner && (
             <button className={activeTab === 'reader_key' ? 'active' : ''} onClick={() => setActiveTab('reader_key')}>
-              <Key size={17} /> My Reader Key
+              <Key size={17} /> {isJournalist ? 'My Reader Key' : 'Generate Reader Key'}
             </button>
           )}
           <button className={activeTab === 'retention' ? 'active' : ''} onClick={() => setActiveTab('retention')}>
@@ -1055,7 +1090,13 @@ export function EditorialDesk({
             <div className="eyebrow">PUBLIC LEDGER / INBOX</div>
             <h1>Received tips</h1>
           </div>
-          <div className="desk-actions">
+          <div className="desk-actions flex items-center gap-3">
+            {isJournalist && (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/60 border border-emerald-700/60 rounded text-xs text-emerald-300 font-mono">
+                <ShieldCheck size={13} className="text-emerald-400" />
+                <span>{journalistName ?? 'reporter.br53fd4i.eth'}</span>
+              </div>
+            )}
             <button className="icon-button" title="Documentation">
               <CircleHelp size={18} />
             </button>
@@ -1080,9 +1121,9 @@ export function EditorialDesk({
               </button>
             </>
           )}
-          {isJournalist && (
+          {!isOwner && (
             <button className={`desk-tab-btn ${activeTab === 'reader_key' ? 'active' : ''}`} onClick={() => setActiveTab('reader_key')}>
-              <Key size={15} /> Reader Key & Shared Keyring
+              <Key size={15} /> {isJournalist ? 'Reader Key & Shared Keyring' : 'Generate Reader Key'}
             </button>
           )}
           <button className={`desk-tab-btn ${activeTab === 'retention' ? 'active' : ''}`} onClick={() => setActiveTab('retention')}>
@@ -1262,15 +1303,23 @@ export function EditorialDesk({
                     <label>Internal note</label>
                     <textarea
                       placeholder="Add a note for your team..."
-                      value={internalNoteText || selectedReport.internalNote || ''}
+                      value={internalNoteText}
                       onChange={(e) => setInternalNoteText(e.target.value)}
                     />
                     <button
                       className="primary-button small-button"
                       disabled={busy}
-                      onClick={() => onSaveNote(internalNoteText)}
+                      onClick={async () => {
+                        try {
+                          await onSaveNote(internalNoteText)
+                          setNoteSavedFeedback(true)
+                          setTimeout(() => setNoteSavedFeedback(false), 2500)
+                        } catch (err: any) {
+                          console.warn('Could not save note:', err)
+                        }
+                      }}
                     >
-                      Save note <Check size={15} />
+                      {noteSavedFeedback ? 'Saved!' : 'Save note'} <Check size={15} />
                     </button>
                   </div>
 
@@ -1280,7 +1329,13 @@ export function EditorialDesk({
                     <select
                       className="w-full bg-[#10211d] border border-[#27483f] text-[#f2f7f5] p-3 rounded text-sm"
                       value={selectedReport.status}
-                      onChange={(e) => onUpdateStatus(e.target.value as any)}
+                      onChange={async (e) => {
+                        try {
+                          await onUpdateStatus(e.target.value as any)
+                        } catch (err: any) {
+                          console.warn('Could not update status:', err)
+                        }
+                      }}
                     >
                       <option value="unread">Unread</option>
                       <option value="in_review">In review</option>
@@ -1305,12 +1360,38 @@ export function EditorialDesk({
                       className="outline-button small-button mt-2"
                       disabled={busy || !replyText.trim()}
                       onClick={async () => {
-                        await onReply(replyText)
-                        setReplyText('')
+                        try {
+                          await onReply(replyText)
+                          setReplyText('')
+                          setReplyDispatchedFeedback(true)
+                          setTimeout(() => setReplyDispatchedFeedback(false), 3000)
+                        } catch (err: any) {
+                          console.warn('Could not dispatch reply:', err)
+                        }
                       }}
                     >
-                      Dispatch Sealed Reply <ArrowRight size={14} />
+                      {replyDispatchedFeedback ? 'Sealed Reply Sent to Arkiv!' : 'Dispatch Sealed Reply'} <ArrowRight size={14} />
                     </button>
+
+                    {/* DISPATCHED REPLIES LIST */}
+                    {replies && replies.length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-[#27483f]">
+                        <h4 className="text-xs font-semibold uppercase text-emerald-400 mb-2">
+                          Dispatched Official Replies ({replies.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {replies.map((r: any, idx: number) => (
+                            <div key={idx} className="bg-[#0b1714] border border-[#1b352e] rounded p-2.5 text-xs">
+                              <div className="flex justify-between items-center text-gray-400 mb-1">
+                                <span className="font-medium text-emerald-300">{r.author || 'Newsroom'}</span>
+                                <span className="text-[10px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800">Arkiv Sealed</span>
+                              </div>
+                              <p className="text-[#f2f7f5]">{r.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1345,10 +1426,28 @@ export function EditorialDesk({
                     <td className="font-mono text-xs text-emerald-400">{member.address}</td>
                     <td><Pill tone={member.active ? 'investigating' : 'archived'}>{member.active ? 'Active' : 'Revoked'}</Pill></td>
                     <td>
-                      {member.active && (
-                        <button className="text-xs text-rose-400 hover:underline" onClick={() => onRevokeJournalist(member.label)}>
-                          Revoke
-                        </button>
+                      {member.active ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="text-xs text-amber-400 hover:underline font-medium"
+                            disabled={busy}
+                            onClick={() => onRenewJournalist(member.label, 90).catch((err) => console.error(err))}
+                            title="Renew subname for 90 days on ENSv2 Sepolia"
+                          >
+                            Renew (+90d)
+                          </button>
+                          <span className="text-gray-600">·</span>
+                          <button
+                            className="text-xs text-rose-400 hover:underline"
+                            disabled={busy}
+                            onClick={() => onRevokeJournalist(member.label).catch((err) => console.error(err))}
+                            title="Revoke subname on ENSv2 Sepolia"
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">Revoked</span>
                       )}
                     </td>
                   </tr>
@@ -1369,13 +1468,44 @@ export function EditorialDesk({
                   <input placeholder="0x..." value={newJournalistAddr} onChange={(e) => setNewJournalistAddr(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label>Reporter Reader Public Key (Base64Url)</label>
-                  <input placeholder="Key provided by journalist..." value={newJournalistReaderKey} onChange={(e) => setNewJournalistReaderKey(e.target.value)} />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="mb-0">Reporter Reader Public Key (Base64Url)</label>
+                    <button
+                      type="button"
+                      className="text-xs text-emerald-400 hover:underline inline-flex items-center gap-1"
+                      onClick={() => {
+                        const generated = onNewReaderKey()
+                        if (generated?.publicKey) {
+                          setNewJournalistReaderKey(generated.publicKey)
+                        }
+                      }}
+                      title="Generate a fresh X25519 reader keypair offline for onboarding/testing"
+                    >
+                      <Key size={12} /> Auto-Generate Test Key
+                    </button>
+                  </div>
+                  <input
+                    placeholder="Key provided by journalist (or click Auto-Generate above)..."
+                    value={newJournalistReaderKey}
+                    onChange={(e) => setNewJournalistReaderKey(e.target.value)}
+                  />
+                  <span className="text-[11px] text-gray-400 mt-1 block">
+                    X25519 public key generated offline by the reporter.
+                  </span>
+                </div>
+                <div className="form-group">
+                  <label>Subname Validity (Days)</label>
+                  <input
+                    type="number"
+                    value={newJournalistDays}
+                    onChange={(e) => setNewJournalistDays(Number(e.target.value))}
+                    min={1}
+                  />
                 </div>
                 <button
                   className="primary-button small-button"
                   disabled={busy || !newJournalistLabel || !newJournalistAddr}
-                  onClick={() => onAddJournalist({ label: newJournalistLabel, address: newJournalistAddr, readerPublicKey: newJournalistReaderKey })}
+                  onClick={() => onAddJournalist({ label: newJournalistLabel, address: newJournalistAddr, readerPublicKey: newJournalistReaderKey, validForDays: newJournalistDays }).catch((err) => console.error(err))}
                 >
                   Mint Subname on ENSv2
                 </button>
@@ -1388,7 +1518,18 @@ export function EditorialDesk({
                   Encrypt the newsroom private decryption keys for the journalist's reader public key so they can triage incoming tips.
                 </p>
                 <div className="form-group">
-                  <label>Journalist Reader Public Key</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="mb-0">Journalist Reader Public Key</label>
+                    {newJournalistReaderKey && !shareReaderKeyInput && (
+                      <button
+                        type="button"
+                        className="text-xs text-amber-400 hover:underline inline-flex items-center gap-1"
+                        onClick={() => setShareReaderKeyInput(newJournalistReaderKey)}
+                      >
+                        Use key from delegation above
+                      </button>
+                    )}
+                  </div>
                   <input placeholder="Paste public key..." value={shareReaderKeyInput} onChange={(e) => setShareReaderKeyInput(e.target.value)} />
                 </div>
                 <button
@@ -1467,23 +1608,111 @@ export function EditorialDesk({
                 <strong className="text-sm text-amber-300 block">Rotate Encryption Keypair (On-Chain ENS)</strong>
                 <span className="text-xs text-gray-400">Current active key version: v{keyVersion}. Rotates key on Ethereum Sepolia.</span>
               </div>
-              <button className="outline-button small-button" disabled={busy} onClick={onRotateKey}>
+              <button
+                className="outline-button small-button"
+                disabled={busy}
+                onClick={() => {
+                  onRotateKey().catch((err) => {
+                    console.error('Rotate key failed:', err)
+                  })
+                }}
+              >
                 <RefreshCw size={14} /> Rotate to Version {keyVersion + 1}
+              </button>
+            </div>
+
+            {/* EDITORIAL POLICY ON-CHAIN */}
+            <div className="mt-6 p-4 bg-[#0f1e1b] border border-[#233e36] rounded">
+              <h4 className="font-bold text-sm text-emerald-400 mb-2">ENSv2 Editorial Policy (On-Chain Text Record)</h4>
+              <p className="text-xs text-gray-400 mb-3">
+                Configure acceptable categories, maximum payload limit, and attachment permissions published on <code>blindreport.policy</code>.
+              </p>
+              <div className="form-group mb-3">
+                <label>Accepted Investigation Categories (Comma separated)</label>
+                <input
+                  value={policyCategories}
+                  onChange={(e) => setPolicyCategories(e.target.value)}
+                  placeholder="e.g. investigacao, corrupcao, direitos-humanos"
+                />
+              </div>
+              <div className="flex gap-4 items-center mb-3">
+                <div className="form-group flex-1">
+                  <label>Max Body Limit (Bytes)</label>
+                  <input
+                    type="number"
+                    value={policyMaxBytes}
+                    onChange={(e) => setPolicyMaxBytes(Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-group flex items-center gap-2 pt-5">
+                  <input
+                    type="checkbox"
+                    id="policyAttachments"
+                    checked={policyAttachments}
+                    onChange={(e) => setPolicyAttachments(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 bg-gray-900 border-gray-700"
+                  />
+                  <label htmlFor="policyAttachments" className="cursor-pointer text-xs">Allow Document Attachments</label>
+                </div>
+              </div>
+              <button
+                className="primary-button small-button"
+                disabled={busy || !policyCategories.trim()}
+                onClick={() => {
+                  const cats = policyCategories.split(',').map((c) => c.trim()).filter(Boolean)
+                  onUpdatePolicy({ categories: cats, maxBytes: policyMaxBytes, attachments: policyAttachments }).catch((err) => {
+                    console.error('Update policy failed:', err)
+                  })
+                }}
+              >
+                Publish Policy to ENSv2 (Sepolia)
               </button>
             </div>
           </div>
         )}
 
-        {/* TAB 4: MY READER KEY (JOURNALIST ONLY) */}
-        {activeTab === 'reader_key' && isJournalist && (
+        {/* TAB 4: MY READER KEY */}
+        {activeTab === 'reader_key' && !isOwner && (
           <div className="panel-card">
             <h3><Key size={18} /> Reporter Reader Key & Shared Keyring</h3>
             <p>
-              As an authorized reporter, generate your device-specific reader keypair.
-              Deliver the public key to your newsroom owner to receive an encrypted copy of the newsroom triage keys.
+              {isJournalist
+                ? 'As an authorized reporter, generate your device-specific reader keypair or query your on-chain records.'
+                : 'Passo 1 (Offline / Sem Permissão): Gere seu par de chaves assimétricas de leitura (X25519) neste navegador. Envie a chave pública gerada ao editor para que ele delegue sua identidade no ENS e criptografe o chaveiro.'}
             </p>
 
             <div className="panel-grid mt-4">
+              {isJournalist && (
+                <div className="p-4 bg-[#0f1e1b] border border-[#233e36] rounded col-span-full">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h4 className="font-bold text-sm text-cyan-400 mb-1 flex items-center gap-2">
+                      <ShieldCheck size={16} /> On-Chain ENSv2 Identity & Reader Key Record (Sepolia)
+                    </h4>
+                    <p className="text-xs text-gray-400">
+                      Query the live Sepolia ENS Universal Resolver for <code>{journalistName ?? 'reporter.br53fd4i.eth'}</code> to verify on-chain authority.
+                    </p>
+                  </div>
+                  <button
+                    className="outline-button small-button text-xs py-1.5"
+                    disabled={busy}
+                    onClick={() => onResolveOnChainReaderKey?.().catch((err: any) => console.error(err))}
+                  >
+                    Query On-Chain ENS Record
+                  </button>
+                </div>
+                {onchainReaderKey && (
+                  <div className="mt-3 p-3 bg-[#0a1513] border border-cyan-800/40 rounded">
+                    <div className="text-xs font-bold text-cyan-300">Sepolia Text Record (blindreport.readerkey):</div>
+                    <div className="code-block text-xs mt-1 text-cyan-200">{onchainReaderKey}</div>
+                    <span className="text-[11px] text-emerald-400 font-semibold mt-1 inline-block">
+                      ✔ Verified on-chain via Sepolia ENS Resolver proxy
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
               <div className="p-4 bg-[#0f1e1b] border border-[#233e36] rounded">
                 <h4 className="font-bold text-sm text-emerald-400 mb-2">1. Generate Reader Keypair</h4>
                 <p className="text-xs text-gray-400 mb-3">Generates an ephemeral X25519 keypair in this browser session.</p>
@@ -1579,9 +1808,27 @@ export function EditorialDesk({
                 disabled={busy || !registerLabel}
                 onClick={() => onRegisterNewsroom({ label: registerLabel, categories: ['Corruption', 'Public policy', 'Human rights', 'Environment'], maxBytes: 200000, attachments: true })}
               >
-                Execute Sepolia Deployment (Commit & Reveal)
+                {busy ? 'Executing On-Chain Deployment...' : 'Execute Sepolia Deployment (Commit & Reveal)'}
               </button>
             </div>
+
+            {adminStep && (
+              <div className="max-w-md mt-6 p-4 bg-[#0a1815] border border-emerald-500/30 rounded">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <strong className="text-sm text-emerald-400">On-Chain ENSv2 Deployment Progress:</strong>
+                </div>
+                <div className="text-xs text-gray-300 font-mono">
+                  {adminStep.step === 'resolver' && '1/6 Deploying PermissionedResolver proxy via VerifiableFactory...'}
+                  {adminStep.step === 'commit' && '2/6 Submitting ENS commitment on ETHRegistrar (Commit-Reveal)...'}
+                  {adminStep.step === 'commit_wait' && `3/6 Awaiting Sepolia block maturation (~${adminStep.seconds ?? 60}s to prevent front-running)...`}
+                  {adminStep.step === 'register' && '4/6 Minting MockUSDC & Registering .eth name on Sepolia registrar...'}
+                  {adminStep.step === 'records' && '5/6 Publishing Libsodium Curve25519 public key and policy text records...'}
+                  {adminStep.step === 'registry' && '6/6 Deploying & authorizing SubRegistry for journalists...'}
+                  {adminStep.step === 'done' && '✔ Newsroom registration completed successfully!'}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

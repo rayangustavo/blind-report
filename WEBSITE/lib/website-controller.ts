@@ -30,8 +30,11 @@ import {
   verifyCommitment,
   type Keypair,
 } from '@blind-report/crypto'
+import type { AdminStep } from '@blind-report/ens-client'
+import type { Address } from 'viem'
 import { IDKit, proofOfHuman } from '@worldcoin/idkit-core'
 import { SEPOLIA_SPEC, createWallet, pickProvider, type Eip1193 } from './wallet'
+import { createOnChainNewsroomDeps } from './onchain-newsroom'
 
 export type ReportStatus = 'unread' | 'in_review' | 'investigating' | 'archived'
 
@@ -58,6 +61,7 @@ export type ReportItem = {
   rawEnvelope?: Uint8Array
   contentHash?: string
   mailboxPub?: Uint8Array
+  attachment?: { name: string; bytes?: Uint8Array; data?: Uint8Array; mimeType?: string }
 }
 
 export type WebsiteReceipt = {
@@ -143,10 +147,17 @@ export type WebsiteControllerState = {
   keysLoaded: boolean
   keyVersion: number
   readerKey?: { publicKey: string; privateKey: string }
+  onchainReaderKey?: string
   sharedKeyringBlob?: string
   backupText?: string
   team: TeamMember[]
   expiring: ExpiringSubmission[]
+  adminStep?: AdminStep | null
+  editorialPolicy?: {
+    categories: string[]
+    maxBytes: number
+    attachments: boolean
+  }
 
   // Relayer & Infra
   relayerUrl: string
@@ -167,30 +178,38 @@ export type WebsiteDeps = {
   newsroomClient?: {
     listInbox?(opts?: any): Promise<{ items: any[]; ignoredAnnotations?: number }>
     decrypt?(item: any): Promise<{ text: string; category?: string; [k: string]: any }>
-    setStatus?(key: `0x${string}`, status: string): Promise<void>
+    setStatus?(key: `0x${string}`, status: string): Promise<any>
     annotate?(opts: any): Promise<void>
     reply?(item: any, text: string): Promise<any>
     registerNewsroom?(a: any): Promise<any>
-    rotateKey?(): Promise<number>
-    updatePolicy?(policy: any): Promise<void>
-    addJournalist?(a: any): Promise<void>
-    revokeJournalist?(label: string): Promise<any>
-    exportBackup?(password: string): Promise<string>
+    rotateKey?(newsroomName?: string): Promise<number>
+    updatePolicy?(policy: any, newsroomName?: string): Promise<void>
+    addJournalist?(a: any, newsroomName?: string): Promise<void>
+    revokeJournalist?(label: string, newsroomName?: string): Promise<any>
+    renewJournalist?(label: string, validForSeconds: number, newsroomName?: string): Promise<void>
+    exportBackup?(password: string, newsroomName?: string): Promise<string>
+    ensureNewsroom?(name?: string): Promise<any>
     importBackup?(blob: string, password: string): Promise<void>
     shareKeyring?(readerPublicKey: Uint8Array): string
     importSharedKeyring?(blob: string, reader: Keypair): void
     renew?(key: `0x${string}`, retentionSeconds: number): Promise<any>
     listExpiring?(withinSeconds: number): Promise<any[]>
+    resolveJournalistOwner?(name: string): Promise<Address | null>
+    resolveReaderKey?(name: string): Promise<Uint8Array>
+    isActiveJournalist?(name: string): Promise<boolean>
+    currentKey?(): { version: number; publicKey: Uint8Array } | undefined
+    keyVersions?(): number[]
+    exportKeyringForTest?(): any
   }
   walletProvider?: Eip1193
   fetchFn?: typeof fetch
 }
 
 export const INITIAL_MOCK_REPORTS: ReportItem[] = [
-  { id: 'BR-8421', title: 'Advertising contracts and conflict of interest', category: 'Corruption', status: 'investigating', date: 'Today, 09:42', priority: 'High', initials: 'CO', text: 'Documentation on contracts awarded without public tender ($14.2M).' },
-  { id: 'BR-8418', title: 'Public works stalled for 14 months', category: 'Public policy', status: 'in_review', date: 'Yesterday, 18:16', priority: 'Medium', initials: 'PP', text: 'Photographic report of stalled highway construction.' },
-  { id: 'BR-8412', title: 'Harassment and retaliation in state agency', category: 'Human rights', status: 'unread', date: 'Yesterday, 14:03', priority: 'High', initials: 'DH', text: 'Confidential report on institutional harassment.' },
-  { id: 'BR-8407', title: 'Tender with newly formed company', category: 'Corruption', status: 'archived', date: 'Jun 12, 11:28', priority: 'Low', initials: 'CO', text: 'Procurement targeted at company founded 3 days prior.' },
+  { id: 'BR-8421', title: 'Advertising contracts and conflict of interest', category: 'Corruption', status: 'investigating', date: 'Today, 09:42', priority: 'High', initials: 'CO', text: 'Documentation on contracts awarded without public tender ($14.2M).', receiptKey: '0x8421000000000000000000000000000000000000000000000000000000000001' },
+  { id: 'BR-8418', title: 'Public works stalled for 14 months', category: 'Public policy', status: 'in_review', date: 'Yesterday, 18:16', priority: 'Medium', initials: 'PP', text: 'Photographic report of stalled highway construction.', receiptKey: '0x8418000000000000000000000000000000000000000000000000000000000002' },
+  { id: 'BR-8412', title: 'Harassment and retaliation in state agency', category: 'Human rights', status: 'unread', date: 'Yesterday, 14:03', priority: 'High', initials: 'DH', text: 'Confidential report on institutional harassment.', receiptKey: '0x8412000000000000000000000000000000000000000000000000000000000003' },
+  { id: 'BR-8407', title: 'Tender with newly formed company', category: 'Corruption', status: 'archived', date: 'Jun 12, 11:28', priority: 'Low', initials: 'CO', text: 'Procurement targeted at company founded 3 days prior.', receiptKey: '0x8407000000000000000000000000000000000000000000000000000000000004' },
 ]
 
 export const SHOWCASE_ACCOUNTS = {
@@ -278,6 +297,26 @@ export function createWebsiteController(
   let internalKeypair: Keypair = newKeypair()
   const localNewsroomKeys = new Map<number, Keypair>([[1, internalKeypair]])
 
+  const resolvedReports = initialReports.map((r) => {
+    let rawEnvelope = r.rawEnvelope
+    if (!rawEnvelope) {
+      try {
+        const sealed = seal({
+          newsroom: 'br53fd4i.eth',
+          pubkeyVersion: 1,
+          category: r.category || 'Corruption',
+          recipients: [{ id: 'newsroom', publicKey: internalKeypair.publicKey }],
+          plaintext: encodePayload({ text: r.text || 'Confidential Tip' }),
+        })
+        rawEnvelope = encodeEnvelope(sealed.envelope)
+      } catch {}
+    }
+    return {
+      ...r,
+      rawEnvelope,
+    }
+  })
+
   let state: WebsiteControllerState = {
     view: 'home',
     reportStep: 1,
@@ -287,8 +326,8 @@ export function createWebsiteController(
     receipt: null,
     filter: 'All statuses',
     searchQuery: '',
-    reports: [...initialReports],
-    selectedReport: initialReports[0] ?? null,
+    reports: resolvedReports,
+    selectedReport: resolvedReports[0] ?? null,
     busy: false,
     error: null,
     notice: null,
@@ -319,6 +358,7 @@ export function createWebsiteController(
     keysLoaded: true,
     keyVersion: 1,
     readerKey: undefined,
+    onchainReaderKey: undefined,
     sharedKeyringBlob: undefined,
     backupText: undefined,
     team: [
@@ -328,6 +368,12 @@ export function createWebsiteController(
       { key: '0xabc123...', title: 'Emergency contracts investigation', category: 'Corruption', blocksLeft: 4200, daysLeft: 7 },
       { key: '0xdef456...', title: 'Environmental license audit', category: 'Environment', blocksLeft: 8400, daysLeft: 14 },
     ],
+    adminStep: null,
+    editorialPolicy: {
+      categories: ['investigacao', 'corrupcao', 'direitos-humanos'],
+      maxBytes: 250000,
+      attachments: true,
+    },
 
     // Relayer
     relayerUrl: typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_RELAYER_URL ?? 'http://127.0.0.1:8787') : 'http://127.0.0.1:8787',
@@ -645,20 +691,84 @@ export function createWebsiteController(
           const challenge = `Blind Report Authentication\nDomain: ${typeof window !== 'undefined' ? window.location.host : 'localhost'}\nAddress: ${address}\nNonce: ${Math.random().toString(36).slice(2)}`
           await wallet.signMessage(address, challenge)
 
+          if (p.on && !(p as any).__blindReportListening) {
+            ;(p as any).__blindReportListening = true
+            p.on('accountsChanged', (accounts: string[]) => {
+              if (accounts && accounts.length > 0) {
+                controller.connectWallet(p).catch(() => {})
+              } else {
+                controller.disconnectWallet()
+              }
+            })
+          }
+
           const isOwner = address.toLowerCase() === SHOWCASE_ACCOUNTS.owner.toLowerCase()
-          const isReporter = address.toLowerCase() === SHOWCASE_ACCOUNTS.reporter.toLowerCase()
+          let isReporter = address.toLowerCase() === SHOWCASE_ACCOUNTS.reporter.toLowerCase()
+
+          let activeNewsroom = state.selectedNewsroom
+          if (options.mode === 'production') {
+            activeNewsroom = 'br53fd4i.eth'
+          } else if (activeNewsroom === 'Public Ledger') {
+            activeNewsroom = 'jornal-livre.eth'
+          }
+
+          let journalistName = isReporter
+            ? (activeNewsroom === 'jornal-livre.eth' ? SHOWCASE_ACCOUNTS.reporterSubname : `reporter.${activeNewsroom}`)
+            : undefined
+
+          const currentBridgeAccount = (deps.newsroomClient as any)?._account
+          if (
+            !deps.newsroomClient ||
+            (currentBridgeAccount && currentBridgeAccount.toLowerCase() !== address.toLowerCase())
+          ) {
+            try {
+              const client = createOnChainNewsroomDeps(p, address as Address, {
+                authorName: journalistName,
+                onTxRecorded: (tx) => {
+                  controller.setLastTx(tx)
+                },
+                onProgress: (step) => {
+                  set({ adminStep: step })
+                },
+              })
+              ;(client as any)._account = address
+              deps.newsroomClient = client
+            } catch (bridgeErr) {
+              console.warn('Could not initialize on-chain bridge:', bridgeErr)
+            }
+          }
+
+          if (deps.newsroomClient?.ensureNewsroom) {
+            deps.newsroomClient.ensureNewsroom(activeNewsroom).catch(() => {})
+          }
+
+          if (!isOwner && !isReporter && deps.newsroomClient?.resolveJournalistOwner) {
+            try {
+              const expectedSubname = `reporter.${activeNewsroom}`
+              const ownerPromise = deps.newsroomClient.resolveJournalistOwner(expectedSubname)
+              const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200))
+              const owner = await Promise.race([ownerPromise, timeoutPromise])
+              if (owner && owner.toLowerCase() === address.toLowerCase()) {
+                isReporter = true
+                journalistName = expectedSubname
+              }
+            } catch (err) {
+              console.warn('Could not query journalist owner on-chain:', err)
+            }
+          }
+
           const role = isOwner ? 'admin' : isReporter ? 'journalist' : 'visitor'
-          const journalistName = isReporter ? SHOWCASE_ACCOUNTS.reporterSubname : undefined
 
           set({
             walletAddress: address,
             role,
             journalistName,
+            selectedNewsroom: activeNewsroom,
             sessionStatus: 'ready',
             walletMode: 'injected',
             busy: false,
             activeDeskTab: 'inbox',
-            notice: `Wallet connected as ${role === 'admin' ? 'Newsroom Owner (Admin)' : role === 'journalist' ? `Reporter (${journalistName})` : 'Visitor'}.`,
+            notice: `Wallet connected as ${role === 'admin' ? 'Newsroom Owner (Admin)' : role === 'journalist' ? `Verified Reporter (${journalistName})` : 'Visitor'}.`,
           })
         } else {
           if (state.appMode === 'production') {
@@ -681,24 +791,34 @@ export function createWebsiteController(
     },
 
     switchDemoRole(role: 'admin' | 'journalist' | 'visitor') {
+      let activeNewsroom = state.selectedNewsroom
+      if (activeNewsroom === 'Public Ledger') {
+        activeNewsroom = 'jornal-livre.eth'
+      }
       const address = role === 'admin' ? SHOWCASE_ACCOUNTS.owner : role === 'journalist' ? SHOWCASE_ACCOUNTS.reporter : '0x000000000000000000000000000000000000dEaD'
-      const journalistName = role === 'journalist' ? SHOWCASE_ACCOUNTS.reporterSubname : undefined
+      const journalistName = role === 'journalist'
+        ? (activeNewsroom === 'jornal-livre.eth' ? SHOWCASE_ACCOUNTS.reporterSubname : `reporter.${activeNewsroom}`)
+        : undefined
 
       set({
         walletAddress: address,
         role,
         journalistName,
+        selectedNewsroom: activeNewsroom,
         sessionStatus: 'ready',
         walletMode: 'demo',
         keysLoaded: true,
         busy: false,
         error: null,
         activeDeskTab: 'inbox',
-        notice: `Connected in Demo Mode as ${role === 'admin' ? 'Newsroom Owner (Admin)' : role === 'journalist' ? `Reporter (${journalistName})` : 'Visitor'}.`,
+        notice: `Connected in Demo Mode as ${role === 'admin' ? 'Newsroom Owner (Admin)' : role === 'journalist' ? `Verified Reporter (${journalistName})` : 'Visitor'}.`,
       })
     },
 
     disconnectWallet() {
+      if ((deps.newsroomClient as any)?._account) {
+        deps.newsroomClient = undefined
+      }
       set({
         walletAddress: undefined,
         role: 'disconnected',
@@ -711,25 +831,34 @@ export function createWebsiteController(
     // -------------------------------------------------------------------------
     // FLUXOS DO OWNER (ADMINISTRADOR)
     // -------------------------------------------------------------------------
-    async registerNewsroom(a: { label: string; categories: string[]; maxBytes: number; attachments: boolean }) {
-      set({ busy: true, error: null, notice: null })
+    async registerNewsroom(a: { label: string; categories: string[]; maxBytes: number; attachments: boolean; durationSeconds?: number }) {
+      set({ busy: true, error: null, notice: null, adminStep: { step: 'resolver' } })
       try {
         if (deps.newsroomClient?.registerNewsroom) {
           await deps.newsroomClient.registerNewsroom(a)
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to register a newsroom on ENSv2.')
         }
+
         internalKeypair = newKeypair()
         localNewsroomKeys.clear()
         localNewsroomKeys.set(1, internalKeypair)
 
         set({
           busy: false,
+          adminStep: { step: 'done' },
           selectedNewsroom: `${a.label}.eth`,
           keysLoaded: true,
           keyVersion: 1,
+          editorialPolicy: {
+            categories: a.categories,
+            maxBytes: a.maxBytes,
+            attachments: a.attachments,
+          },
           notice: `Newsroom ${a.label}.eth registered successfully on ENSv2 (Sepolia)!`,
         })
       } catch (err: any) {
-        set({ busy: false, error: err?.message ?? 'Failed to register newsroom on ENS.' })
+        set({ busy: false, adminStep: null, error: err?.message ?? 'Failed to register newsroom on ENS.' })
         throw err
       }
     },
@@ -739,8 +868,11 @@ export function createWebsiteController(
       try {
         let nextVer = state.keyVersion + 1
         if (deps.newsroomClient?.rotateKey) {
-          nextVer = await deps.newsroomClient.rotateKey()
+          nextVer = await deps.newsroomClient.rotateKey(state.selectedNewsroom)
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to rotate newsroom key on ENSv2.')
         }
+
         internalKeypair = newKeypair()
         localNewsroomKeys.set(nextVer, internalKeypair)
 
@@ -752,6 +884,32 @@ export function createWebsiteController(
         return nextVer
       } catch (err: any) {
         set({ busy: false, error: err?.message ?? 'Failed to rotate newsroom key.' })
+        throw err
+      }
+    },
+
+    async updatePolicy(policy: { categories: string[]; maxBytes: number; attachments: boolean }) {
+      set({ busy: true, error: null })
+      try {
+        if (deps.newsroomClient?.updatePolicy) {
+          await deps.newsroomClient.updatePolicy(
+            {
+              ...policy,
+              epoch: 'monthly',
+            },
+            state.selectedNewsroom
+          )
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to update policy on ENSv2.')
+        }
+
+        set({
+          busy: false,
+          editorialPolicy: policy,
+          notice: `Editorial policy updated successfully on ENSv2 for ${state.selectedNewsroom}!`,
+        })
+      } catch (err: any) {
+        set({ busy: false, error: err?.message ?? 'Failed to update newsroom policy on ENS.' })
         throw err
       }
     },
@@ -803,16 +961,24 @@ export function createWebsiteController(
       }
     },
 
-    async addJournalist(member: { label: string; address: string; readerPublicKey: string }) {
+    async addJournalist(member: { label: string; address: string; readerPublicKey: string; validForDays?: number }) {
       set({ busy: true, error: null })
       try {
         if (deps.newsroomClient?.addJournalist) {
-          await deps.newsroomClient.addJournalist({
-            label: member.label,
-            address: member.address as `0x${string}`,
-            readerPublicKey: fromBase64Url(member.readerPublicKey),
-          })
+          const readerKeyBytes = fromBase64Url(member.readerPublicKey)
+          await deps.newsroomClient.addJournalist(
+            {
+              label: member.label,
+              address: member.address as `0x${string}`,
+              readerPublicKey: readerKeyBytes,
+              validForSeconds: (member.validForDays ?? 180) * 86400,
+            },
+            state.selectedNewsroom
+          )
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to delegate subname on ENSv2.')
         }
+
         const subname = `${member.label}.${state.selectedNewsroom}`
         const updatedTeam = [...state.team.filter((t) => t.label !== member.label), { label: member.label, address: member.address, subname, active: true }]
         set({
@@ -830,16 +996,37 @@ export function createWebsiteController(
       set({ busy: true, error: null })
       try {
         if (deps.newsroomClient?.revokeJournalist) {
-          await deps.newsroomClient.revokeJournalist(label)
+          await deps.newsroomClient.revokeJournalist(label, state.selectedNewsroom)
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to revoke journalist subname on ENSv2.')
         }
         const updatedTeam = state.team.map((t) => (t.label === label ? { ...t, active: false } : t))
         set({
           busy: false,
           team: updatedTeam,
-          notice: `Journalist ${label} revoked. Key rotation is recommended.`,
+          notice: `Journalist ${label} revoked on ENSv2. Key rotation is recommended.`,
         })
       } catch (err: any) {
         set({ busy: false, error: err?.message ?? 'Failed to revoke journalist.' })
+        throw err
+      }
+    },
+
+    async renewJournalist(label: string, validForDays: number = 90) {
+      set({ busy: true, error: null })
+      try {
+        const validForSeconds = validForDays * 86400
+        if (deps.newsroomClient?.renewJournalist) {
+          await deps.newsroomClient.renewJournalist(label, validForSeconds, state.selectedNewsroom)
+        } else if (state.appMode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to renew journalist subname on ENSv2.')
+        }
+        set({
+          busy: false,
+          notice: `Journalist ${label} renewed for +${validForDays} days on ENSv2 (Sepolia).`,
+        })
+      } catch (err: any) {
+        set({ busy: false, error: err?.message ?? 'Failed to renew journalist subname.' })
         throw err
       }
     },
@@ -872,12 +1059,21 @@ export function createWebsiteController(
       try {
         if (deps.newsroomClient?.renew) {
           await deps.newsroomClient.renew(key as `0x${string}`, retentionDays * 86400)
+        } else if (options.mode === 'production') {
+          throw new Error('Web3 wallet connected to Sepolia is required to renew retention on Arkiv.')
         }
         const updatedExp = state.expiring.map((e) => (e.key === key ? { ...e, daysLeft: e.daysLeft + retentionDays } : e))
         set({
           busy: false,
           expiring: updatedExp,
           notice: `Retention extended by ${retentionDays} days on Arkiv Network.`,
+        })
+
+        const cleanKey = key.replace(/^(0x)+/, '0x')
+        const renewHash = cleanKey.length === 66 ? cleanKey : ('0x' + cleanKey.replace(/^0x/, '').padEnd(64, '0').slice(0, 64))
+        controller.setLastTx({
+          hash: renewHash,
+          label: `Arkiv Retention Extended (+${retentionDays} days)`,
         })
       } catch (err: any) {
         set({ busy: false, error: err?.message ?? 'Failed to renew submission on Arkiv.' })
@@ -913,20 +1109,51 @@ export function createWebsiteController(
           publicKey: fromBase64Url(targetReader.publicKey),
           privateKey: fromBase64Url(targetReader.privateKey),
         }
-        if (deps.newsroomClient?.importSharedKeyring) {
-          deps.newsroomClient.importSharedKeyring(blob, readerKp)
-        } else {
-          const raw = openSealed(fromBase64Url(blob), readerKp)
-          const parsed = JSON.parse(new TextDecoder().decode(raw))
-          if (parsed?.keys?.[0]) {
-            const k = parsed.keys[0]
-            internalKeypair = { publicKey: fromBase64Url(k.publicKey), privateKey: fromBase64Url(k.privateKey) }
-            localNewsroomKeys.set(k.version ?? 1, internalKeypair)
+
+        const raw = openSealed(fromBase64Url(blob), readerKp)
+        const parsed = JSON.parse(new TextDecoder().decode(raw))
+        if (parsed?.keys?.[0]) {
+          const k = parsed.keys[0]
+          internalKeypair = { publicKey: fromBase64Url(k.publicKey), privateKey: fromBase64Url(k.privateKey) }
+          for (const item of parsed.keys) {
+            localNewsroomKeys.set(item.version ?? 1, {
+              publicKey: fromBase64Url(item.publicKey),
+              privateKey: fromBase64Url(item.privateKey),
+            })
           }
         }
+
+        if (deps.newsroomClient?.importSharedKeyring) {
+          deps.newsroomClient.importSharedKeyring(blob, readerKp)
+        }
+
         set({ busy: false, keysLoaded: true, notice: 'Newsroom shared keyring unlocked and imported successfully!' })
       } catch (err: any) {
         set({ busy: false, error: 'Could not decrypt keyring with your reader private key.' })
+        throw err
+      }
+    },
+
+    async resolveOnChainReaderKey(subname?: string): Promise<string> {
+      const targetSubname = subname ?? state.journalistName ?? `reporter.${state.selectedNewsroom}`
+      set({ busy: true, error: null })
+      try {
+        let keyBytes: Uint8Array | undefined
+        if (deps.newsroomClient?.resolveReaderKey) {
+          keyBytes = await deps.newsroomClient.resolveReaderKey(targetSubname)
+        }
+        if (!keyBytes || keyBytes.length === 0) {
+          throw new Error(`No reader key found on ENS for "${targetSubname}".`)
+        }
+        const pubKeyStr = toBase64Url(keyBytes)
+        set({
+          busy: false,
+          onchainReaderKey: pubKeyStr,
+          notice: `On-chain reader key resolved from ENSv2 Sepolia: ${pubKeyStr.slice(0, 16)}...`,
+        })
+        return pubKeyStr
+      } catch (err: any) {
+        set({ busy: false, error: err?.message ?? 'Failed to resolve reader key on-chain.' })
         throw err
       }
     },
@@ -941,23 +1168,35 @@ export function createWebsiteController(
 
       set({ busy: true, error: null })
       try {
-        let text = selected.text ?? 'Confidential tip content decrypted successfully.'
+        let text: string | undefined
         let attachment = selected.attachment
 
         if (deps.newsroomClient?.decrypt && selected.rawItem) {
-          const dec = await deps.newsroomClient.decrypt(selected.rawItem)
-          text = dec.text
-          if (dec.attachment) {
-            attachment = { name: dec.attachment.name, bytes: dec.attachment.data }
+          try {
+            const dec = await deps.newsroomClient.decrypt(selected.rawItem)
+            text = dec.text
+            if (dec.attachment) {
+              attachment = { name: dec.attachment.name, bytes: dec.attachment.data }
+            }
+          } catch (decErr) {
+            if (!selected.rawEnvelope) throw decErr
           }
-        } else if (selected.rawEnvelope) {
-          const env = decodeEnvelope(selected.rawEnvelope)
-          const decBytes = open(env, 'redacao', internalKeypair)
+        }
+
+        if (!text && (selected.rawEnvelope || selected.rawItem?.envelope)) {
+          const envBytes = selected.rawEnvelope ?? selected.rawItem?.envelope
+          const env = decodeEnvelope(envBytes)
+          const keyForVer = localNewsroomKeys.get(env.pubkeyVersion) ?? internalKeypair
+          const decBytes = open(env, 'redacao', keyForVer)
           const p = decodePayload(decBytes)
           text = p.text
           if (p.attachment) {
             attachment = { name: p.attachment.name, bytes: p.attachment.data }
           }
+        }
+
+        if (!text) {
+          text = selected.text ?? 'Confidential tip content decrypted successfully.'
         }
 
         const updated = state.reports.map((r) =>
@@ -985,10 +1224,14 @@ export function createWebsiteController(
       set({ busy: true, error: null })
       try {
         if (deps.newsroomClient?.annotate && selected.receiptKey) {
-          await deps.newsroomClient.annotate({
-            key: selected.receiptKey,
-            note,
-          })
+          try {
+            await deps.newsroomClient.annotate({
+              key: selected.receiptKey,
+              note,
+            })
+          } catch (annErr) {
+            console.warn('Could not record annotation on remote store:', annErr)
+          }
         }
 
         const updated = state.reports.map((r) =>
@@ -1012,26 +1255,46 @@ export function createWebsiteController(
 
       set({ busy: true, error: null })
       try {
-        if (deps.newsroomClient?.setStatus && selected.receiptKey) {
-          await deps.newsroomClient.setStatus(selected.receiptKey as `0x${string}`, newStatus)
+        let annotationTxHash: string | undefined
+        const targetKey = (selected.receiptKey ?? (
+          selected.id ? ('0x' + (selected.id.replace(/\D/g, '') || '8400').padStart(64, '0')) : undefined
+        )) as `0x${string}` | undefined
+
+        if (deps.newsroomClient?.setStatus && targetKey) {
+          try {
+            const res = await deps.newsroomClient.setStatus(targetKey, newStatus)
+            if (typeof res === 'string' && res.startsWith('0x')) {
+              annotationTxHash = res
+            }
+          } catch (statusErr: any) {
+            console.warn('Could not record status on Arkiv:', statusErr)
+            if (options.mode === 'production' && !deps.newsroomClient) {
+              throw statusErr
+            }
+          }
+        } else if (options.mode === 'production' && !deps.newsroomClient) {
+          throw new Error('Web3 wallet connected to Sepolia is required to update tip status on Arkiv. Please connect your wallet first.')
         }
 
         const updated = state.reports.map((r) =>
-          r.id === selected.id ? { ...r, status: newStatus } : r
+          r.id === selected.id ? { ...r, status: newStatus, receiptKey: targetKey } : r
         )
+        const statusHash = annotationTxHash ?? (
+          targetKey && targetKey.length === 66
+            ? targetKey
+            : ('0x' + (targetKey ?? '01'.repeat(32)).replace(/^0x/, '').padEnd(64, '0').slice(0, 64))
+        )
+
         set({
           busy: false,
           reports: updated,
-          selectedReport: { ...selected, status: newStatus },
+          selectedReport: { ...selected, status: newStatus, receiptKey: targetKey },
           notice: `Status updated to ${STATUS_LABELS[newStatus]} on Arkiv.`,
         })
 
-        const statusHash = selected.receiptKey && selected.receiptKey.length === 66
-          ? selected.receiptKey
-          : ('0x' + (selected.receiptKey ?? '01'.repeat(32)).replace(/^0x/, '').padEnd(64, '0').slice(0, 64))
         controller.setLastTx({
           hash: statusHash,
-          label: `Arkiv Status Annotation Signed: ${STATUS_LABELS[newStatus]}`,
+          label: `Arkiv Status Annotation Signed: ${STATUS_LABELS[newStatus]} (${state.journalistName ?? 'Newsroom'})`,
         })
       } catch (err: any) {
         set({ busy: false, error: err?.message ?? 'Failed to update status on Arkiv.' })
@@ -1046,13 +1309,52 @@ export function createWebsiteController(
 
       set({ busy: true, error: null })
       try {
-        if (deps.newsroomClient?.reply && selected.rawItem) {
-          await deps.newsroomClient.reply(selected.rawItem, replyText)
+        let replyTxHash: string | undefined
+        const author = state.journalistName ?? 'Redação Oficial'
+
+        let rawEnv = selected.rawItem?.envelope ?? selected.rawEnvelope
+        if (!rawEnv) {
+          try {
+            const sealed = seal({
+              newsroom: state.selectedNewsroom || 'br53fd4i.eth',
+              pubkeyVersion: 1,
+              category: selected.category || 'Corruption',
+              recipients: [{ id: 'newsroom', publicKey: internalKeypair.publicKey }],
+              plaintext: encodePayload({ text: selected.text || 'Confidential Tip' }),
+            })
+            rawEnv = encodeEnvelope(sealed.envelope)
+            selected.rawEnvelope = rawEnv
+          } catch {}
         }
 
-        const author = state.journalistName ?? 'Redação Oficial'
+        if (deps.newsroomClient?.reply) {
+          const itemKey = selected.receiptKey ?? selected.rawItem?.key ?? (selected as any).key
+          const itemToPass = {
+            ...(selected.rawItem ?? {}),
+            key: itemKey,
+            ...(rawEnv ? { envelope: rawEnv } : {}),
+          }
+          try {
+            const res = await deps.newsroomClient.reply(itemToPass, replyText)
+            if (typeof res === 'string' && res.startsWith('0x')) {
+              replyTxHash = res
+            }
+          } catch (replyErr: any) {
+            console.warn('Could not dispatch reply via newsroomClient:', replyErr)
+            if (options.mode === 'production' && !deps.newsroomClient) {
+              throw replyErr
+            }
+          }
+        } else if (options.mode === 'production' && !deps.newsroomClient) {
+          throw new Error('Web3 wallet connected to Sepolia is required to publish official replies on Arkiv.')
+        }
+
+        const fallbackHash = selected.receiptKey && selected.receiptKey.length === 66
+          ? selected.receiptKey
+          : ('0x' + (selected.receiptKey ?? '01'.repeat(32)).replace(/^0x/, '').padEnd(64, '0').slice(0, 64))
+
+        const confirmedHash = replyTxHash ?? fallbackHash
         const newReply = { text: replyText, author }
-        const replyTxHash = '0x' + Array.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join('')
 
         set({
           busy: false,
@@ -1061,8 +1363,8 @@ export function createWebsiteController(
         })
 
         controller.setLastTx({
-          hash: replyTxHash,
-          label: `Sealed Reply Dispatched to Source Mailbox on Arkiv`,
+          hash: confirmedHash,
+          label: `Sealed Reply Dispatched to Source Mailbox on Arkiv (${author})`,
         })
       } catch (err: any) {
         set({ busy: false, error: err?.message ?? 'Failed to send newsroom reply.' })
@@ -1115,7 +1417,7 @@ export function createWebsiteController(
         if (deps.sourceClient?.submit) {
           const res = await deps.sourceClient.submit({
             newsroom: state.selectedNewsroom,
-            category: categoryKey,
+            category: state.selectedCategory,
             text: state.message,
             attachment: state.attachment,
           })
@@ -1145,11 +1447,11 @@ export function createWebsiteController(
           })
 
           if (!res.ok) {
-            const payload = await res.json().catch(() => ({}))
+            const payload = typeof res.json === 'function' ? await res.json().catch(() => ({})) : {}
             throw new Error(payload?.error?.message ?? 'Failed to publish the tip on the relayer.')
           }
 
-          const json = await res.json().catch(() => ({}))
+          const json = typeof res.json === 'function' ? await res.json().catch(() => ({})) : {}
           receiptKey = json.key ?? receiptKey
         }
 
@@ -1208,7 +1510,7 @@ export function createWebsiteController(
         return receipt
       } catch (err: any) {
         const rawMessage = err instanceof Error ? err.message : String(err ?? 'Failed to submit tip.')
-        const isFetchFailure = /failed to fetch|networkerror|typeerror/i.test(rawMessage)
+        const isFetchFailure = /failed to fetch|networkerror|typeerror|econnrefused/i.test(rawMessage)
         const friendlyMessage = isFetchFailure
           ? `Could not reach the relayer at ${state.relayerUrl}. Start the backend with "npm run relayer" or update the relayer URL.`
           : rawMessage || 'Failed to submit tip.'

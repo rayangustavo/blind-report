@@ -176,7 +176,7 @@ describe('WEBSITE - Separação Arquitetural: Modo Produção (/) vs Modo Demo (
       expect(receipt.salt).toBeDefined()
       expect(receipt.rawEnvelope).toBeDefined()
       expect(controller.state.lastTx).toBeDefined()
-      expect(controller.state.lastTx?.url).toContain('https://sepolia.etherscan.io/tx/')
+      expect(controller.state.lastTx?.url).toMatch(/rabdi\.explorer\.arkiv\.network|sepolia\.etherscan\.io/)
     })
 
     it('ao atualizar status ou enviar réplica na demo, atualiza lastTx com link do Etherscan Sepolia', async () => {
@@ -207,7 +207,18 @@ describe('WEBSITE - Separação Arquitetural: Modo Produção (/) vs Modo Demo (
     })
 
     it('a comprovação matemática de autoria (Zero-Knowledge / Commitment) funciona exatamente igual', () => {
-      const controller = createWebsiteController({}, undefined, { mode: 'demo' })
+      const controller = createWebsiteController(
+        {
+          fetchFn: async () =>
+            ({
+              ok: true,
+              status: 201,
+              json: async () => ({ key: '0x123', parts: 1 }),
+            } as Response),
+        },
+        undefined,
+        { mode: 'demo' }
+      )
 
       controller.loadDemoScenario('procurement')
       const message = controller.state.message

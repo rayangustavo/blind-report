@@ -157,6 +157,9 @@ describe('WEBSITE Roles Flow — Owner, Journalist, Relayer and Whistleblower En
       if (url.endsWith('/health')) {
         return { ok: true, json: async () => ({ ok: true }) } as any
       }
+      if (url.includes('/submissions')) {
+        return { ok: true, json: async () => ({ key: '0x' + 'aa'.repeat(32), parts: 1 }) } as any
+      }
       return { ok: false } as any
     })
 
