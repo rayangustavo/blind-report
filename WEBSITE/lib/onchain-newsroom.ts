@@ -66,6 +66,18 @@ export function createOnChainNewsroomDeps(
       if (prop === 'writeContract') {
         return async (...args: unknown[]) => {
           const fn = Reflect.get(target, prop, receiver) as Function
+
+          if (args[0] && typeof args[0] === 'object' && provider && typeof (provider as any).request === 'function') {
+            try {
+              const activeAccounts = (await (provider as any).request({ method: 'eth_accounts' })) as string[]
+              if (activeAccounts && activeAccounts.length > 0 && activeAccounts[0]) {
+                ;(args[0] as Record<string, unknown>).account = activeAccounts[0] as Address
+              }
+            } catch {
+              // fallback para a conta padrão do target
+            }
+          }
+
           const hash = (await fn.apply(target, args)) as Hex
           const callInfo = args[0] as { functionName?: string }
           const name = callInfo?.functionName || 'writeContract'

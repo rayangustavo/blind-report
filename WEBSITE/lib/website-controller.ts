@@ -603,9 +603,13 @@ export function createWebsiteController(
             ? (activeNewsroom === 'jornal-livre.eth' ? SHOWCASE_ACCOUNTS.reporterSubname : `reporter.${activeNewsroom}`)
             : undefined
 
-          if (!deps.newsroomClient) {
+          const currentBridgeAccount = (deps.newsroomClient as any)?._account
+          if (
+            !deps.newsroomClient ||
+            (currentBridgeAccount && currentBridgeAccount.toLowerCase() !== address.toLowerCase())
+          ) {
             try {
-              deps.newsroomClient = createOnChainNewsroomDeps(p, address as Address, {
+              const client = createOnChainNewsroomDeps(p, address as Address, {
                 authorName: journalistName,
                 onTxRecorded: (tx) => {
                   controller.setLastTx(tx)
@@ -614,6 +618,8 @@ export function createWebsiteController(
                   set({ adminStep: step })
                 },
               })
+              ;(client as any)._account = address
+              deps.newsroomClient = client
             } catch (bridgeErr) {
               console.warn('Could not initialize on-chain bridge:', bridgeErr)
             }
@@ -697,6 +703,9 @@ export function createWebsiteController(
     },
 
     disconnectWallet() {
+      if ((deps.newsroomClient as any)?._account) {
+        deps.newsroomClient = undefined
+      }
       set({
         walletAddress: undefined,
         role: 'disconnected',

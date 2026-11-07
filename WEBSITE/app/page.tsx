@@ -999,9 +999,9 @@ export function EditorialDesk({
               </button>
             </>
           )}
-          {isJournalist && (
+          {!isOwner && (
             <button className={activeTab === 'reader_key' ? 'active' : ''} onClick={() => setActiveTab('reader_key')}>
-              <Key size={17} /> My Reader Key
+              <Key size={17} /> {isJournalist ? 'My Reader Key' : 'Generate Reader Key'}
             </button>
           )}
           <button className={activeTab === 'retention' ? 'active' : ''} onClick={() => setActiveTab('retention')}>
@@ -1067,9 +1067,9 @@ export function EditorialDesk({
               </button>
             </>
           )}
-          {isJournalist && (
+          {!isOwner && (
             <button className={`desk-tab-btn ${activeTab === 'reader_key' ? 'active' : ''}`} onClick={() => setActiveTab('reader_key')}>
-              <Key size={15} /> Reader Key & Shared Keyring
+              <Key size={15} /> {isJournalist ? 'Reader Key & Shared Keyring' : 'Generate Reader Key'}
             </button>
           )}
           <button className={`desk-tab-btn ${activeTab === 'retention' ? 'active' : ''}`} onClick={() => setActiveTab('retention')}>
@@ -1414,8 +1414,30 @@ export function EditorialDesk({
                   <input placeholder="0x..." value={newJournalistAddr} onChange={(e) => setNewJournalistAddr(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label>Reporter Reader Public Key (Base64Url)</label>
-                  <input placeholder="Key provided by journalist..." value={newJournalistReaderKey} onChange={(e) => setNewJournalistReaderKey(e.target.value)} />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="mb-0">Reporter Reader Public Key (Base64Url)</label>
+                    <button
+                      type="button"
+                      className="text-xs text-emerald-400 hover:underline inline-flex items-center gap-1"
+                      onClick={() => {
+                        const generated = onNewReaderKey()
+                        if (generated?.publicKey) {
+                          setNewJournalistReaderKey(generated.publicKey)
+                        }
+                      }}
+                      title="Generate a fresh X25519 reader keypair offline for onboarding/testing"
+                    >
+                      <Key size={12} /> Auto-Generate Test Key
+                    </button>
+                  </div>
+                  <input
+                    placeholder="Key provided by journalist (or click Auto-Generate above)..."
+                    value={newJournalistReaderKey}
+                    onChange={(e) => setNewJournalistReaderKey(e.target.value)}
+                  />
+                  <span className="text-[11px] text-gray-400 mt-1 block">
+                    X25519 public key generated offline by the reporter.
+                  </span>
                 </div>
                 <div className="form-group">
                   <label>Subname Validity (Days)</label>
@@ -1442,7 +1464,18 @@ export function EditorialDesk({
                   Encrypt the newsroom private decryption keys for the journalist's reader public key so they can triage incoming tips.
                 </p>
                 <div className="form-group">
-                  <label>Journalist Reader Public Key</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="mb-0">Journalist Reader Public Key</label>
+                    {newJournalistReaderKey && !shareReaderKeyInput && (
+                      <button
+                        type="button"
+                        className="text-xs text-amber-400 hover:underline inline-flex items-center gap-1"
+                        onClick={() => setShareReaderKeyInput(newJournalistReaderKey)}
+                      >
+                        Use key from delegation above
+                      </button>
+                    )}
+                  </div>
                   <input placeholder="Paste public key..." value={shareReaderKeyInput} onChange={(e) => setShareReaderKeyInput(e.target.value)} />
                 </div>
                 <button
@@ -1584,17 +1617,19 @@ export function EditorialDesk({
           </div>
         )}
 
-        {/* TAB 4: MY READER KEY (JOURNALIST ONLY) */}
-        {activeTab === 'reader_key' && isJournalist && (
+        {/* TAB 4: MY READER KEY */}
+        {activeTab === 'reader_key' && !isOwner && (
           <div className="panel-card">
             <h3><Key size={18} /> Reporter Reader Key & Shared Keyring</h3>
             <p>
-              As an authorized reporter, generate your device-specific reader keypair.
-              Deliver the public key to your newsroom owner to receive an encrypted copy of the newsroom triage keys.
+              {isJournalist
+                ? 'As an authorized reporter, generate your device-specific reader keypair or query your on-chain records.'
+                : 'Passo 1 (Offline / Sem Permissão): Gere seu par de chaves assimétricas de leitura (X25519) neste navegador. Envie a chave pública gerada ao editor para que ele delegue sua identidade no ENS e criptografe o chaveiro.'}
             </p>
 
             <div className="panel-grid mt-4">
-              <div className="p-4 bg-[#0f1e1b] border border-[#233e36] rounded col-span-full">
+              {isJournalist && (
+                <div className="p-4 bg-[#0f1e1b] border border-[#233e36] rounded col-span-full">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
                     <h4 className="font-bold text-sm text-cyan-400 mb-1 flex items-center gap-2">
@@ -1622,6 +1657,7 @@ export function EditorialDesk({
                   </div>
                 )}
               </div>
+            )}
 
               <div className="p-4 bg-[#0f1e1b] border border-[#233e36] rounded">
                 <h4 className="font-bold text-sm text-emerald-400 mb-2">1. Generate Reader Keypair</h4>
