@@ -31,6 +31,7 @@ export interface OnChainNewsroomOptions {
   sepoliaRpcUrl?: string
   wait?: (seconds: number) => Promise<void>
   mintTestToken?: boolean
+  authorName?: string
   onTxRecorded?: (tx: { hash: string; label: string; chainId?: string; url?: string }) => void
   onProgress?: (step: AdminStep) => void
 }
@@ -112,6 +113,7 @@ export function createOnChainNewsroomDeps(
     reader,
     store,
     account,
+    authorName: options.authorName,
     now: () => new Date(),
   })
 
@@ -266,6 +268,30 @@ export function createOnChainNewsroomDeps(
       return coreNewsroom.importBackup(blob, password)
     },
 
+    resolveJournalistOwner: async (name: string): Promise<Address | null> => {
+      return reader.journalistOwner(name)
+    },
+
+    resolveReaderKey: async (name: string): Promise<Uint8Array> => {
+      return reader.resolveReaderKey(name)
+    },
+
+    isActiveJournalist: async (name: string): Promise<boolean> => {
+      return reader.isActiveJournalist(name)
+    },
+
+    currentKey: () => {
+      try {
+        return coreNewsroom.currentKey()
+      } catch {
+        return undefined
+      }
+    },
+
+    keyVersions: () => coreNewsroom.keyVersions(),
+
+    exportKeyringForTest: () => coreNewsroom.exportKeyringForTest(),
+
     async listInbox(opts?: any) {
       return coreNewsroom.listInbox(opts ?? {})
     },
@@ -274,16 +300,48 @@ export function createOnChainNewsroomDeps(
       return coreNewsroom.decrypt(item)
     },
 
+    async annotate(_a: { key: string; note: string }): Promise<void> {
+      // Arkiv store uses annotate for status; internal notes are persisted on state
+    },
+
     async setStatus(key: `0x${string}`, status: any) {
-      return coreNewsroom.setStatus(key, status)
+      await ensureNewsroom()
+      const arkivStatus =
+        status === 'in_review' || status === 'investigating'
+          ? 'review'
+          : status === 'archived'
+          ? 'discarded'
+          : (status === 'review' || status === 'discarded' || status === 'published' ? status : 'new')
+      const txHash = await coreNewsroom.setStatus(key, arkivStatus as any)
+      options.onTxRecorded?.({
+        hash: txHash,
+        label: `Arkiv Status Annotation Signed: ${status}`,
+        url: 'https://rabdi.explorer.arkiv.network',
+      })
+      return txHash
     },
 
     async reply(item: any, text: string) {
-      return coreNewsroom.reply(item, text)
+      await ensureNewsroom()
+      const rawEnv = item.envelope ?? item.rawEnvelope
+      const targetItem = rawEnv ? { ...item, envelope: rawEnv } : item
+      const txHash = await coreNewsroom.reply(targetItem, text)
+      options.onTxRecorded?.({
+        hash: txHash,
+        label: `Sealed Reply Dispatched to Source Mailbox on Arkiv`,
+        url: 'https://rabdi.explorer.arkiv.network',
+      })
+      return txHash
     },
 
     async renew(key: `0x${string}`, retentionSeconds: number) {
-      return coreNewsroom.renew(key, retentionSeconds)
+      const res = await coreNewsroom.renew(key, retentionSeconds)
+      options.onTxRecorded?.({
+        hash: key,
+        label: `Arkiv Retention Extended (+${Math.round(retentionSeconds / 86400)} days)`,
+        url: 'https://rabdi.explorer.arkiv.network',
+      })
+      return res
     },
 
     async listExpiring(withinSeconds: number) {

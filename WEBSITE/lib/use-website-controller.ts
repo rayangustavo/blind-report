@@ -86,6 +86,7 @@ export function useWebsiteController(initialDeps?: WebsiteDeps, options?: Contro
     // Journalist
     newReaderKey: controller.newReaderKey.bind(controller),
     importSharedKeyring: controller.importSharedKeyring.bind(controller),
+    resolveOnChainReaderKey: controller.resolveOnChainReaderKey.bind(controller),
     decryptSelectedReport: controller.decryptSelectedReport.bind(controller),
     saveInternalNote: controller.saveInternalNote.bind(controller),
     updateReportStatus: controller.updateReportStatus.bind(controller),

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import {
   ArrowRight,
   BadgeCheck,
@@ -88,6 +88,7 @@ export default function App() {
     shareKeyring,
     renewSubmission,
     newReaderKey,
+    resolveOnChainReaderKey,
     importSharedKeyring,
     decryptSelectedReport,
     saveInternalNote,
@@ -456,6 +457,7 @@ export default function App() {
           onSaveNote={saveInternalNote}
           onUpdateStatus={updateReportStatus}
           onReply={replyToReport}
+          replies={state.replies}
           onRegisterNewsroom={registerNewsroom}
           onRotateKey={rotateKey}
           onUpdatePolicy={updatePolicy}
@@ -466,6 +468,8 @@ export default function App() {
           onRenewJournalist={renewJournalist}
           onShareKeyring={shareKeyring}
           onNewReaderKey={newReaderKey}
+          onResolveOnChainReaderKey={resolveOnChainReaderKey}
+          onchainReaderKey={state.onchainReaderKey}
           onImportSharedKeyring={importSharedKeyring}
           onRenewSubmission={renewSubmission}
           adminStep={state.adminStep}
@@ -934,15 +938,25 @@ export function EditorialDesk({
   onRenewJournalist,
   onShareKeyring,
   onNewReaderKey,
+  onResolveOnChainReaderKey,
+  onchainReaderKey,
   onImportSharedKeyring,
   onRenewSubmission,
   adminStep,
   editorialPolicy,
+  replies = [],
   busy,
   onBack,
 }: any) {
   const [internalNoteText, setInternalNoteText] = useState('')
   const [replyText, setReplyText] = useState('')
+  const [noteSavedFeedback, setNoteSavedFeedback] = useState(false)
+  const [replyDispatchedFeedback, setReplyDispatchedFeedback] = useState(false)
+
+  useEffect(() => {
+    setInternalNoteText(selectedReport?.internalNote || '')
+  }, [selectedReport?.id, selectedReport?.internalNote])
+
   const [backupPassword, setBackupPassword] = useState('')
   const [importBackupPassword, setImportBackupPassword] = useState('')
   const [importBackupBlob, setImportBackupBlob] = useState('')
@@ -1022,7 +1036,13 @@ export function EditorialDesk({
             <div className="eyebrow">PUBLIC LEDGER / INBOX</div>
             <h1>Received tips</h1>
           </div>
-          <div className="desk-actions">
+          <div className="desk-actions flex items-center gap-3">
+            {isJournalist && (
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/60 border border-emerald-700/60 rounded text-xs text-emerald-300 font-mono">
+                <ShieldCheck size={13} className="text-emerald-400" />
+                <span>{journalistName ?? 'reporter.br53fd4i.eth'}</span>
+              </div>
+            )}
             <button className="icon-button" title="Documentation">
               <CircleHelp size={18} />
             </button>
@@ -1229,15 +1249,23 @@ export function EditorialDesk({
                     <label>Internal note</label>
                     <textarea
                       placeholder="Add a note for your team..."
-                      value={internalNoteText || selectedReport.internalNote || ''}
+                      value={internalNoteText}
                       onChange={(e) => setInternalNoteText(e.target.value)}
                     />
                     <button
                       className="primary-button small-button"
                       disabled={busy}
-                      onClick={() => onSaveNote(internalNoteText)}
+                      onClick={async () => {
+                        try {
+                          await onSaveNote(internalNoteText)
+                          setNoteSavedFeedback(true)
+                          setTimeout(() => setNoteSavedFeedback(false), 2500)
+                        } catch (err: any) {
+                          console.warn('Could not save note:', err)
+                        }
+                      }}
                     >
-                      Save note <Check size={15} />
+                      {noteSavedFeedback ? 'Saved!' : 'Save note'} <Check size={15} />
                     </button>
                   </div>
 
@@ -1247,7 +1275,13 @@ export function EditorialDesk({
                     <select
                       className="w-full bg-[#10211d] border border-[#27483f] text-[#f2f7f5] p-3 rounded text-sm"
                       value={selectedReport.status}
-                      onChange={(e) => onUpdateStatus(e.target.value as any)}
+                      onChange={async (e) => {
+                        try {
+                          await onUpdateStatus(e.target.value as any)
+                        } catch (err: any) {
+                          console.warn('Could not update status:', err)
+                        }
+                      }}
                     >
                       <option value="unread">Unread</option>
                       <option value="in_review">In review</option>
@@ -1272,12 +1306,38 @@ export function EditorialDesk({
                       className="outline-button small-button mt-2"
                       disabled={busy || !replyText.trim()}
                       onClick={async () => {
-                        await onReply(replyText)
-                        setReplyText('')
+                        try {
+                          await onReply(replyText)
+                          setReplyText('')
+                          setReplyDispatchedFeedback(true)
+                          setTimeout(() => setReplyDispatchedFeedback(false), 3000)
+                        } catch (err: any) {
+                          console.warn('Could not dispatch reply:', err)
+                        }
                       }}
                     >
-                      Dispatch Sealed Reply <ArrowRight size={14} />
+                      {replyDispatchedFeedback ? 'Sealed Reply Sent to Arkiv!' : 'Dispatch Sealed Reply'} <ArrowRight size={14} />
                     </button>
+
+                    {/* DISPATCHED REPLIES LIST */}
+                    {replies && replies.length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-[#27483f]">
+                        <h4 className="text-xs font-semibold uppercase text-emerald-400 mb-2">
+                          Dispatched Official Replies ({replies.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {replies.map((r: any, idx: number) => (
+                            <div key={idx} className="bg-[#0b1714] border border-[#1b352e] rounded p-2.5 text-xs">
+                              <div className="flex justify-between items-center text-gray-400 mb-1">
+                                <span className="font-medium text-emerald-300">{r.author || 'Newsroom'}</span>
+                                <span className="text-[10px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800">Arkiv Sealed</span>
+                              </div>
+                              <p className="text-[#f2f7f5]">{r.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1534,6 +1594,35 @@ export function EditorialDesk({
             </p>
 
             <div className="panel-grid mt-4">
+              <div className="p-4 bg-[#0f1e1b] border border-[#233e36] rounded col-span-full">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h4 className="font-bold text-sm text-cyan-400 mb-1 flex items-center gap-2">
+                      <ShieldCheck size={16} /> On-Chain ENSv2 Identity & Reader Key Record (Sepolia)
+                    </h4>
+                    <p className="text-xs text-gray-400">
+                      Query the live Sepolia ENS Universal Resolver for <code>{journalistName ?? 'reporter.br53fd4i.eth'}</code> to verify on-chain authority.
+                    </p>
+                  </div>
+                  <button
+                    className="outline-button small-button text-xs py-1.5"
+                    disabled={busy}
+                    onClick={() => onResolveOnChainReaderKey?.().catch((err: any) => console.error(err))}
+                  >
+                    Query On-Chain ENS Record
+                  </button>
+                </div>
+                {onchainReaderKey && (
+                  <div className="mt-3 p-3 bg-[#0a1513] border border-cyan-800/40 rounded">
+                    <div className="text-xs font-bold text-cyan-300">Sepolia Text Record (blindreport.readerkey):</div>
+                    <div className="code-block text-xs mt-1 text-cyan-200">{onchainReaderKey}</div>
+                    <span className="text-[11px] text-emerald-400 font-semibold mt-1 inline-block">
+                      ✔ Verified on-chain via Sepolia ENS Resolver proxy
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <div className="p-4 bg-[#0f1e1b] border border-[#233e36] rounded">
                 <h4 className="font-bold text-sm text-emerald-400 mb-2">1. Generate Reader Keypair</h4>
                 <p className="text-xs text-gray-400 mb-3">Generates an ephemeral X25519 keypair in this browser session.</p>
